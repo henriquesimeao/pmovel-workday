@@ -86,6 +86,20 @@ Estende o `BaseRestClient`. Porta `src/config.js` + `src/workday-rest.js`:
 Validado contra o tenant de dev `wwglgmcdcl_extdev`: retorna os 82 workers,
 mesma saída do código de referência.
 
+## Cliente Pmovel (`pmovel/PmovelClient`)
+
+Estende o `BaseRestClient`. Autenticação por JWT:
+
+- `fetchToken`: `POST /v3/auth/login` com `{ access_key_id, secret_access_key }`
+  → `access_token`. A expiração do cache é extraída do claim `exp` do próprio
+  JWT (`computeExpiry`), com fallback de 1h e margem de 60s.
+- Métodos de Employees (Fase 1): `createEmployee`, `updateEmployeeByExternalId`,
+  `inactivateEmployeeByExternalId`, `reactivateEmployeeByExternalId`,
+  `getEmployeeByExternalId` (retorna `null` em 404, para a decisão de upsert) e
+  `listEmployees` (paginação `page`/`limit`).
+
+DTOs tipados a partir do OpenAPI v3.0.59 em `pmovel/pmovel.types.ts`.
+
 ## Decisões de projeto
 
 - **Integração via API, não banco direto.** O integrador é cliente de duas APIs
@@ -129,8 +143,8 @@ camada `config/` e nunca logadas.
 | 1 | Scaffold NestJS + configuração tipada | ✅ concluída |
 | 2 | BaseRestClient (token-cache, retry, paginação) | ✅ concluída |
 | 3 | WorkdayClient | ✅ concluída |
-| 4 | Descoberta do schema + de/para | pendente |
-| 5 | PmovelClient | pendente |
+| 4 | Descoberta do schema + de/para | ✅ concluída (ver decisões pendentes no de/para) |
+| 5 | PmovelClient | ✅ concluída |
 | 6 | Persistência MySQL (TypeORM) | pendente |
 | 7 | Camada de mapeamento | pendente |
 | 8 | SyncOrchestrator + gatilhos | pendente |
