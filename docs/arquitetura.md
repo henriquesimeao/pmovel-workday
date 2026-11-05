@@ -184,5 +184,5 @@ camada `config/` e nunca logadas.
 | 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration não aplicada contra MySQL real — ver docs/banco-de-dados.md) |
 | 7 | Camada de mapeamento | ✅ concluída |
 | 8 | SyncOrchestrator + gatilhos | ✅ concluída |
-| 9 | EmployeeSyncJob (Fase 1) | pendente |
+| 9 | EmployeeSyncJob (Fase 1) | ✅ concluída (ver docs/fase-1-colaboradores.md) |
 | 10 | Documentação + roadmap | pendente |

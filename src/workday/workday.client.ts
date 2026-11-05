@@ -7,6 +7,7 @@ import {
   WorkerDetail,
   WorkdayCollection,
 } from './workday.types';
+import { ConsolidatedWorker } from './consolidated-worker';
 
 /**
  * Cliente da REST API do Workday (OAuth 2.0 via refresh_token).
@@ -151,5 +152,49 @@ export class WorkdayClient extends BaseRestClient {
     pageSize = 100,
   ): AsyncGenerator<T> {
     return this.paginateOffset<T>(path, params, pageSize);
+  }
+
+  /**
+   * Monta o `ConsolidatedWorker` a partir dos endpoints disponíveis
+   * (common/v1 + staffing/v6). Campos que dependem de WQL/SOAP (hireDate,
+   * terminationDate, active, legalEntity, cpf) ficam ausentes até a decisão
+   * registrada em docs/de-para-workday-pmovel.md.
+   *
+   * O parsing isola o restante da aplicação da forma crua do Workday.
+   */
+  async getConsolidatedWorker(id: string): Promise<ConsolidatedWorker> {
+    const [common, staffing] = await Promise.all([
+      this.getResource<Record<string, any>>(`common/v1/{tenant}/workers/${id}`),
+      this.getResource<Record<string, any>>(`staffing/v6/{tenant}/workers/${id}`),
+    ]);
+    return WorkdayClient.consolidate(id, common, staffing);
+  }
+
+  /** Lógica pura de consolidação (testável sem rede). */
+  static consolidate(
+    id: string,
+    common: Record<string, any>,
+    staffing: Record<string, any>,
+  ): ConsolidatedWorker {
+    const country = staffing?.primaryJob?.location?.country ?? {};
+    return {
+      id,
+      descriptor: staffing?.descriptor ?? common?.descriptor ?? '',
+      workerId: staffing?.workerId ?? '',
+      email: staffing?.person?.email,
+      dateOfBirth: common?.dateOfBirth,
+      isManager: Boolean(common?.isManager),
+      jobTitle: staffing?.primaryJob?.descriptor,
+      countryAlpha2: country['ISO_3166-1_Alpha-2_Code'],
+      countryAlpha3: country['ISO_3166-1_Alpha-3_Code'],
+      supervisoryOrganization: staffing?.primaryJob?.supervisoryOrganization?.descriptor,
+      legalEntityId: staffing?.primaryJob?.supervisoryOrganization?.Organization_Reference_ID,
+      legalEntity: staffing?.primaryJob?.supervisoryOrganization?.descriptor,
+      // Gaps (WQL/SOAP) — ficam undefined até a decisão do usuário:
+      hireDate: undefined,
+      terminationDate: undefined,
+      active: undefined,
+      cpf: undefined,
+    };
   }
 }
