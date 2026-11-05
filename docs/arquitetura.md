@@ -71,6 +71,21 @@ implementa o seu fluxo — `refresh_token` + Basic auth no Workday,
 `POST /v3/auth/login` no Pmovel. Mensagens de erro expõem apenas o `pathname`
 da URL, nunca a query string (evita vazar parâmetros sensíveis em logs).
 
+## Cliente Workday (`workday/WorkdayClient`)
+
+Estende o `BaseRestClient`. Porta `src/config.js` + `src/workday-rest.js`:
+
+- `resolveServicesHost`: converte o host da UI para `-services1` (ou usa
+  `WorkdayServicesUrl`).
+- `fetchToken`: `grant_type=refresh_token` com Basic auth (clientId:secret).
+- `resolveUrl`: paths relativos a `/ccx/api/` com `{tenant}` substituído.
+- Métodos: `listWorkers()` (paginado), `getWorkersPage()`, `getWorker(id)`,
+  `getResource()`/`paginateResource()` (sub-recursos e expansões, usados na
+  descoberta da Task 4 e pelos mapeadores).
+
+Validado contra o tenant de dev `wwglgmcdcl_extdev`: retorna os 82 workers,
+mesma saída do código de referência.
+
 ## Decisões de projeto
 
 - **Integração via API, não banco direto.** O integrador é cliente de duas APIs
@@ -113,7 +128,7 @@ camada `config/` e nunca logadas.
 |---|---|---|
 | 1 | Scaffold NestJS + configuração tipada | ✅ concluída |
 | 2 | BaseRestClient (token-cache, retry, paginação) | ✅ concluída |
-| 3 | WorkdayClient | pendente |
+| 3 | WorkdayClient | ✅ concluída |
 | 4 | Descoberta do schema + de/para | pendente |
 | 5 | PmovelClient | pendente |
 | 6 | Persistência MySQL (TypeORM) | pendente |
