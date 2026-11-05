@@ -145,7 +145,7 @@ camada `config/` e nunca logadas.
 | 3 | WorkdayClient | ✅ concluída |
 | 4 | Descoberta do schema + de/para | ✅ concluída (ver decisões pendentes no de/para) |
 | 5 | PmovelClient | ✅ concluída |
-| 6 | Persistência MySQL (TypeORM) | pendente |
+| 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration não aplicada contra MySQL real — ver docs/banco-de-dados.md) |
 | 7 | Camada de mapeamento | pendente |
 | 8 | SyncOrchestrator + gatilhos | pendente |
 | 9 | EmployeeSyncJob (Fase 1) | pendente |

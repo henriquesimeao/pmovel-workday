@@ -54,7 +54,8 @@ ambiente é feita no boot (ver [docs/arquitetura.md](docs/arquitetura.md)).
 | [docs/arquitetura.md](docs/arquitetura.md) | Arquitetura, fases, decisões de projeto, status |
 | [docs/workday-novo-cliente.md](docs/workday-novo-cliente.md) | Setup do tenant Workday (ISU, ISSG, domínios, API Client) |
 | [docs/referencia-workday-rest.md](docs/referencia-workday-rest.md) | Código JS de referência da comunicação com o Workday |
-| [docs/de-para-workday-pmovel.md](docs/de-para-workday-pmovel.md) | Mapeamento de campos Workday → Pmovel *(a partir da Task 4)* |
+| [docs/de-para-workday-pmovel.md](docs/de-para-workday-pmovel.md) | Mapeamento de campos Workday → Pmovel e decisões pendentes |
+| [docs/banco-de-dados.md](docs/banco-de-dados.md) | Schema MySQL, migrations e política de dados |
 
 ## Código de referência
 
