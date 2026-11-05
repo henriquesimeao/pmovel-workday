@@ -140,4 +140,21 @@ describe('EmployeeMapper', () => {
     expect(update).not.toHaveProperty('external_id');
     expect(update.name).toBe('Fulano de Tal');
   });
+
+  it('toUpdateDto NÃO envia campos imutáveis (employeegroup/syndicate/workday)', async () => {
+    const mapper = new EmployeeMapper(
+      fields,
+      fakeCnpjService({ SO01: 'X' }),
+      configWithCpf,
+    );
+    const update = await mapper.toUpdateDto(consolidatedWorkerFixture);
+
+    // definidos só na admissão — não devem ser sobrescritos no update
+    expect(update).not.toHaveProperty('employeegroup_code');
+    expect(update).not.toHaveProperty('syndicate_code');
+    expect(update).not.toHaveProperty('workday_code');
+    // mas o create ainda os inclui
+    const create = await mapper.toCreateDto(consolidatedWorkerFixture);
+    expect(create.employeegroup_code).toBe('GRP01');
+  });
 });

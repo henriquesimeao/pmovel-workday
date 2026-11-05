@@ -56,9 +56,18 @@ Validado no tenant de dev: 112 workers (82 ativos + 30 terminados), `hireDate` e
 - `cnpj` exige o de/para em `cnpj_mapping` (legal entity `company_ID` → CNPJ); sem
   ele, o item falha (registrado) e o lote segue;
 - `employeegroup_code`/`syndicate_code`/`workday_code` usam o default em
-  `mapping.config` até você definir o valor/de-para;
+  `mapping.config` **apenas na admissão**; na **atualização não são enviados**
+  (`immutableOnUpdate`), para não sobrescrever ajustes feitos manualmente no Pmovel;
 - `cpf` vem de `nationalIdentifiers`; ausente em parte do tenant de demo (EUA), mas
   presente em tenant BR.
+
+### Campos imutáveis na atualização
+
+Alguns campos são definidos só na admissão e **nunca** reenviados no `PUT` de
+atualização, porque podem ter sido ajustados manualmente no Pmovel. Hoje:
+`employeegroup_code`, `syndicate_code`, `workday_code` (lista
+`immutableOnUpdate` em `src/mapping/mapping.config.ts`). O `EmployeeMapper.toUpdateDto`
+remove esses campos do corpo do update.
 
 ## Testes
 

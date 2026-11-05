@@ -91,9 +91,14 @@ hoje com `default: 'DEFAULT'` em `src/mapping/mapping.config.ts`:
 
 - `employeegroup_code`, `syndicate_code`, `workday_code`.
 
-Para cada um, escolha: **valor default fixo** por tenant, ou **de-para por
-dimensão** do Workday (ex.: localização, workerType, organização). A camada de
-mapeamento já suporta os dois modos — é só ajustar a config, sem mexer em código.
+**Regra aplicada:** esses três campos são definidos **apenas na admissão** (com
+`default: 'DEFAULT'`) e **nunca enviados na atualização** — podem ter sido
+ajustados manualmente no Pmovel, e o integrador não deve sobrescrevê-los. Isso é
+controlado por `immutableOnUpdate` em `src/mapping/mapping.config.ts`.
+
+Se quiser trocar o valor fixo ou derivar de uma dimensão do Workday (localização,
+workerType, organização), é só ajustar a config — a camada de mapeamento suporta
+os três modos (direct/lookup/default) sem mexer em código.
 
 Opcional: popular a tabela `cnpj_mapping` com as legal entities reais (`company_ID`)
 → CNPJ de cada empresa.

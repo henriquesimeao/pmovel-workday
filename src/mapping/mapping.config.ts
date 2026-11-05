@@ -46,7 +46,29 @@ export interface EmployeeMappingConfig {
     dt_nascimento?: FieldMappingRule;
     dt_admissao?: FieldMappingRule;
   };
+  /**
+   * Campos definidos na **admissão**, mas **nunca enviados na atualização** —
+   * o integrador não deve sobrescrever valores que podem ter sido ajustados
+   * manualmente no Pmovel (ex.: grupo, sindicato, jornada).
+   */
+  immutableOnUpdate: Array<keyof CreateEmployeeDtoWritable>;
 }
+
+/** Campos do CreateEmployeeDto que podem aparecer no update (para tipar immutableOnUpdate). */
+type CreateEmployeeDtoWritable = {
+  employeegroup_code: string;
+  syndicate_code: string;
+  workday_code: string;
+  name: string;
+  email: string;
+  cpf: string;
+  country: string;
+  is_manager: boolean;
+  job_position: string | null;
+  dt_nascimento: string | null;
+  dt_admissao: string | null;
+  matricula: string;
+};
 
 /**
  * Config DEFAULT inicial, coerente com docs/de-para-workday-pmovel.md.
@@ -80,4 +102,7 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
     dt_nascimento: { mode: 'direct', source: 'dateOfBirth' },
     dt_admissao: { mode: 'direct', source: 'hireDate' },
   },
+  // Definidos só na admissão; nunca sobrescritos na atualização (podem ter sido
+  // ajustados manualmente no Pmovel).
+  immutableOnUpdate: ['employeegroup_code', 'syndicate_code', 'workday_code'],
 };

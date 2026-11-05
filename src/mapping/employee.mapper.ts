@@ -115,11 +115,17 @@ export class EmployeeMapper {
    */
   async toUpdateDto(worker: ConsolidatedWorker): Promise<UpdateEmployeeDto> {
     const create = await this.toCreateDtoSafe(worker);
-    // Remove os campos que a atualização não aceita.
+    // Remove os campos que a atualização não aceita (chave e cnpj)...
     const { cnpj: _cnpj, external_id: _ext, ...rest } = create;
     void _cnpj;
     void _ext;
-    return rest;
+    // ...e os campos imutáveis no update (definidos só na admissão; podem ter
+    // sido ajustados manualmente no Pmovel e não devem ser sobrescritos).
+    const update = rest as Record<string, unknown>;
+    for (const field of this.config.immutableOnUpdate ?? []) {
+      delete update[field as string];
+    }
+    return update as UpdateEmployeeDto;
   }
 
   /** Versão que não valida obrigatórios (para montar o update parcial). */

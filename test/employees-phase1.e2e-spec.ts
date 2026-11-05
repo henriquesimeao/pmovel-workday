@@ -181,6 +181,12 @@ describe('Fase 1 — EmployeeSyncJob (e2e)', () => {
     expect(fakePmovel.createEmployee.mock.calls.length).toBe(createCallsBefore);
     expect(fakePmovel.updateEmployeeByExternalId).toHaveBeenCalled();
     expect(fakePmovel.store.get('1001').name).toBe('Ana Silva');
+
+    // update NÃO deve carregar os campos imutáveis (grupo/sindicato/jornada)
+    const lastUpdate = fakePmovel.updateEmployeeByExternalId.mock.calls.at(-1)![1];
+    expect(lastUpdate).not.toHaveProperty('employeegroup_code');
+    expect(lastUpdate).not.toHaveProperty('syndicate_code');
+    expect(lastUpdate).not.toHaveProperty('workday_code');
   });
 
   it('3ª sync: um worker terminado → DEMITIDO (inactivate)', async () => {
