@@ -100,6 +100,27 @@ Estende o `BaseRestClient`. Autenticação por JWT:
 
 DTOs tipados a partir do OpenAPI v3.0.59 em `pmovel/pmovel.types.ts`.
 
+## Camada de mapeamento (`mapping/`)
+
+Converte o **worker consolidado** do Workday (`ConsolidatedWorker`) nos DTOs do
+Pmovel, com configuração que cobre os três casos do de/para:
+
+- `FieldMappingService` — resolve cada campo por regra:
+  - `direct`: lê um atributo do worker (com transforms `trimJobTitle`,
+    `alpha3ToAlpha2`).
+  - `default`: valor fixo configurável (para gaps sem origem no Workday).
+  - `lookup`: resolvido externamente (hoje só CNPJ).
+- `CnpjMappingService` — resolve o CNPJ pela legal entity via `cnpj_mapping`.
+- `EmployeeMapper` — monta `CreateEmployeeDto`/`UpdateEmployeeDto`, resolve o
+  CNPJ (lookup) e **valida os obrigatórios**, lançando `MappingError` com a lista
+  de campos ausentes (o job transforma em falha de item, sem abortar o lote).
+
+A config inicial (`DEFAULT_EMPLOYEE_MAPPING`) reflete o de/para da Task 4:
+campos confirmados como `direct`, gaps obrigatórios (`employeegroup_code`,
+`syndicate_code`, `workday_code`) como `default` placeholder, e `cnpj` como
+`lookup`. Externalizar para arquivo/env é um próximo passo quando a operação
+precisar ajustar sem recompilar.
+
 ## Decisões de projeto
 
 - **Integração via API, não banco direto.** O integrador é cliente de duas APIs
@@ -146,7 +167,7 @@ camada `config/` e nunca logadas.
 | 4 | Descoberta do schema + de/para | ✅ concluída (ver decisões pendentes no de/para) |
 | 5 | PmovelClient | ✅ concluída |
 | 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration não aplicada contra MySQL real — ver docs/banco-de-dados.md) |
-| 7 | Camada de mapeamento | pendente |
+| 7 | Camada de mapeamento | ✅ concluída |
 | 8 | SyncOrchestrator + gatilhos | pendente |
 | 9 | EmployeeSyncJob (Fase 1) | pendente |
 | 10 | Documentação + roadmap | pendente |

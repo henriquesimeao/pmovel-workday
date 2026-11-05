@@ -70,7 +70,9 @@ export const workerStaffingV6Fixture = {
  * (hireDate, terminationDate, active, company, cpf) ficam opcionais até a
  * decisão sobre WQL/SOAP (ver de-para).
  */
-export const consolidatedWorkerFixture = {
+import { ConsolidatedWorker } from '../consolidated-worker';
+
+export const consolidatedWorkerFixture: ConsolidatedWorker = {
   id: '00000000000000000000000000000001',
   descriptor: 'Fulano de Tal',
   workerId: '1001',
@@ -83,7 +85,9 @@ export const consolidatedWorkerFixture = {
   supervisoryOrganization: 'Operações - Brasil',
   // Gaps (dependem de WQL/SOAP) — presentes aqui para testar o caminho feliz:
   hireDate: '2021-03-01',
-  terminationDate: null as string | null,
+  terminationDate: null,
   active: true,
   legalEntity: 'ACME Brasil LTDA',
+  legalEntityId: 'SO01',
+  cpf: '00000000000',
 };
