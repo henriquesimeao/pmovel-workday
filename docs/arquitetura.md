@@ -185,4 +185,4 @@ camada `config/` e nunca logadas.
 | 7 | Camada de mapeamento | ✅ concluída |
 | 8 | SyncOrchestrator + gatilhos | ✅ concluída |
 | 9 | EmployeeSyncJob (Fase 1) | ✅ concluída (ver docs/fase-1-colaboradores.md) |
-| 10 | Documentação + roadmap | pendente |
+| 10 | Documentação + roadmap | ✅ concluída (ver docs/roadmap-fases.md) |
