@@ -53,6 +53,24 @@ docs/
 src/*.js                  código de referência (preservado, não é o alvo final)
 ```
 
+## Cliente REST base (`common/http/BaseRestClient`)
+
+Classe abstrata que concentra a mecânica comum aos dois clientes (Workday e
+Pmovel), portada do `src/workday-rest.js` de referência:
+
+- **Cache de token** com renovação ao expirar (`getAccessToken`).
+- **Retry único em 401**: renova o token e repete a chamada uma vez.
+- **Erros tipados**: `RestClientError` com `status` e `body` (o `body` permite
+  ao chamador detectar, por exemplo, "já existe" no upsert da Fase 1).
+- **Paginação em dois estilos**:
+  - `paginateOffset` — coleções `{ data, total }` com `limit`/`offset` (Workday).
+  - `paginatePage` — arrays por página com `page`/`limit` (Pmovel).
+
+A obtenção do token é um *template method* (`fetchToken`): cada subclasse
+implementa o seu fluxo — `refresh_token` + Basic auth no Workday,
+`POST /v3/auth/login` no Pmovel. Mensagens de erro expõem apenas o `pathname`
+da URL, nunca a query string (evita vazar parâmetros sensíveis em logs).
+
 ## Decisões de projeto
 
 - **Integração via API, não banco direto.** O integrador é cliente de duas APIs
@@ -94,7 +112,7 @@ camada `config/` e nunca logadas.
 | Task | Descrição | Status |
 |---|---|---|
 | 1 | Scaffold NestJS + configuração tipada | ✅ concluída |
-| 2 | BaseRestClient (token-cache, retry, paginação) | pendente |
+| 2 | BaseRestClient (token-cache, retry, paginação) | ✅ concluída |
 | 3 | WorkdayClient | pendente |
 | 4 | Descoberta do schema + de/para | pendente |
 | 5 | PmovelClient | pendente |
