@@ -61,7 +61,10 @@ export const workerStaffingV6Fixture = {
       Organization_Reference_ID: 'SO01',
     },
   },
-  workerType: { descriptor: 'Employee', id: '0000000000000000000000000000000c' },
+  workerType: {
+    descriptor: 'Employee',
+    id: '0000000000000000000000000000000c',
+  },
 };
 
 /**

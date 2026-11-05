@@ -16,7 +16,7 @@ function fakeCnpjService(map: Record<string, string> = {}): CnpjMappingService {
   } as unknown as CnpjMappingService;
 }
 
-/** Config de teste: cpf vem do worker (preenche o gap do default). */
+/** Config de teste: cpf direto, defaults nomeados, job_position com trim. */
 const configWithCpf: EmployeeMappingConfig = {
   ...DEFAULT_EMPLOYEE_MAPPING,
   fields: {
@@ -25,6 +25,11 @@ const configWithCpf: EmployeeMappingConfig = {
     employeegroup_code: { mode: 'default', value: 'GRP01' },
     syndicate_code: { mode: 'default', value: 'SIND01' },
     workday_code: { mode: 'default', value: 'JOR01' },
+    job_position: {
+      mode: 'direct',
+      source: 'jobTitle',
+      transform: 'trimJobTitle',
+    },
   },
 };
 
@@ -59,25 +64,37 @@ describe('EmployeeMapper', () => {
   });
 
   it('usa valores default para os gaps (modo default)', async () => {
-    const mapper = new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), configWithCpf);
+    const mapper = new EmployeeMapper(
+      fields,
+      fakeCnpjService({ SO01: 'X' }),
+      configWithCpf,
+    );
     const dto = await mapper.toCreateDto(consolidatedWorkerFixture);
     expect(dto.employeegroup_code).toBe('GRP01');
   });
 
   it('lança MappingError quando o CNPJ não está no de/para', async () => {
-    const mapper = new EmployeeMapper(fields, fakeCnpjService({}), configWithCpf);
+    const mapper = new EmployeeMapper(
+      fields,
+      fakeCnpjService({}),
+      configWithCpf,
+    );
 
-    try {
-      await mapper.toCreateDto(consolidatedWorkerFixture);
-      fail('deveria lançar');
-    } catch (e) {
-      expect(e).toBeInstanceOf(MappingError);
-      expect((e as MappingError).missingFields).toContain('cnpj');
-    }
+    await expect(
+      mapper.toCreateDto(consolidatedWorkerFixture),
+    ).rejects.toBeInstanceOf(MappingError);
+    const err = await mapper
+      .toCreateDto(consolidatedWorkerFixture)
+      .catch((e) => e);
+    expect((err as MappingError).missingFields).toContain('cnpj');
   });
 
   it('lança MappingError listando campos obrigatórios ausentes', async () => {
-    const mapper = new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), configWithCpf);
+    const mapper = new EmployeeMapper(
+      fields,
+      fakeCnpjService({ SO01: 'X' }),
+      configWithCpf,
+    );
     // worker sem email e sem cpf
     const incomplete: ConsolidatedWorker = {
       ...consolidatedWorkerFixture,
@@ -85,35 +102,38 @@ describe('EmployeeMapper', () => {
       cpf: null,
     };
 
-    try {
-      await mapper.toCreateDto(incomplete);
-      fail('deveria lançar');
-    } catch (e) {
-      expect(e).toBeInstanceOf(MappingError);
-      const err = e as MappingError;
-      expect(err.missingFields).toEqual(expect.arrayContaining(['email', 'cpf']));
-      expect(err.externalId).toBe('1001');
-    }
+    const err = (await mapper
+      .toCreateDto(incomplete)
+      .catch((e) => e)) as MappingError;
+    expect(err).toBeInstanceOf(MappingError);
+    expect(err.missingFields).toEqual(expect.arrayContaining(['email', 'cpf']));
+    expect(err.externalId).toBe('1001');
   });
 
-  it('com a config DEFAULT, cpf vazio e defaults placeholder geram MappingError (cpf)', async () => {
-    // A config default deixa cpf como default '' (gap) → deve faltar cpf.
+  it('com a config DEFAULT, worker sem CPF gera MappingError (cpf)', async () => {
+    // DEFAULT lê cpf direto do worker; se ausente, falta cpf.
     const mapper = new EmployeeMapper(
       fields,
       fakeCnpjService({ SO01: '00000000000191' }),
       DEFAULT_EMPLOYEE_MAPPING,
     );
-    try {
-      await mapper.toCreateDto(consolidatedWorkerFixture);
-      fail('deveria lançar');
-    } catch (e) {
-      expect(e).toBeInstanceOf(MappingError);
-      expect((e as MappingError).missingFields).toContain('cpf');
-    }
+    const semCpf: ConsolidatedWorker = {
+      ...consolidatedWorkerFixture,
+      cpf: null,
+    };
+    const err = (await mapper
+      .toCreateDto(semCpf)
+      .catch((e) => e)) as MappingError;
+    expect(err).toBeInstanceOf(MappingError);
+    expect(err.missingFields).toContain('cpf');
   });
 
   it('toUpdateDto remove cnpj e external_id e tolera faltas', async () => {
-    const mapper = new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), configWithCpf);
+    const mapper = new EmployeeMapper(
+      fields,
+      fakeCnpjService({ SO01: 'X' }),
+      configWithCpf,
+    );
     const update = await mapper.toUpdateDto(consolidatedWorkerFixture);
 
     expect(update).not.toHaveProperty('cnpj');

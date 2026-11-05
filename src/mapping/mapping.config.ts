@@ -9,7 +9,11 @@ import { ConsolidatedWorker } from '../workday/consolidated-worker';
  * - `default`: valor fixo configurável (para gaps sem origem no Workday).
  */
 export type FieldMappingRule =
-  | { mode: 'direct'; source: keyof ConsolidatedWorker; transform?: TransformName }
+  | {
+      mode: 'direct';
+      source: keyof ConsolidatedWorker;
+      transform?: TransformName;
+    }
   | { mode: 'default'; value: string | number | boolean | null }
   | { mode: 'lookup'; lookup: 'cnpj' };
 
@@ -59,16 +63,20 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
   fields: {
     name: { mode: 'direct', source: 'descriptor' },
     email: { mode: 'direct', source: 'email' },
-    // Gap: CPF não vem na REST; default vazio até WQL/SOAP. Validação alertará.
-    cpf: { mode: 'default', value: '' },
+    // CPF vem do WQL (nationalIdentifiers). Pode estar vazio em tenants não-BR;
+    // nesse caso a validação registra o item como falha, sem abortar o lote.
+    cpf: { mode: 'direct', source: 'cpf' },
     cnpj: { mode: 'lookup', lookup: 'cnpj' },
-    // Gaps obrigatórios — defaults placeholder (o usuário decide o valor real).
+    // Gaps obrigatórios sem origem no Workday — defaults placeholder; o usuário
+    // decide o valor real ou um de-para por dimensão (ver de/para).
     employeegroup_code: { mode: 'default', value: 'DEFAULT' },
     syndicate_code: { mode: 'default', value: 'DEFAULT' },
     workday_code: { mode: 'default', value: 'DEFAULT' },
-    country: { mode: 'direct', source: 'countryAlpha2' },
+    // country não vem na query WQL atual; default BR (tenant brasileiro).
+    country: { mode: 'default', value: 'BR' },
     is_manager: { mode: 'direct', source: 'isManager' },
-    job_position: { mode: 'direct', source: 'jobTitle', transform: 'trimJobTitle' },
+    // jobCode é um código (ex.: "Analista_Sistemas"); mantido como cargo.
+    job_position: { mode: 'direct', source: 'jobTitle' },
     dt_nascimento: { mode: 'direct', source: 'dateOfBirth' },
     dt_admissao: { mode: 'direct', source: 'hireDate' },
   },

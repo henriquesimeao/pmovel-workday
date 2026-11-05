@@ -40,22 +40,25 @@ curl http://localhost:3000/sync/runs/1
 
 Agendado: defina `SYNC_SCHEDULE_ENABLED=true` e `SYNC_CRON` no `.env`.
 
-## Dependências de dados (gaps conhecidos)
+## Origem dos dados (via WQL)
 
-A classificação completa (especialmente **demissão**) e alguns campos
-obrigatórios dependem de dados que **não vêm pela REST de recurso do Workday**
-(ver `docs/de-para-workday-pmovel.md`): `hireDate`, `terminationDate`, `active`,
-legal entity (CNPJ) e national ID (CPF). Hoje o `getConsolidatedWorker` deixa
-esses campos ausentes; quando a origem (WQL liberado ou SOAP) estiver definida,
-o `WorkdayClient.getConsolidatedWorker` será estendido para preenchê-los — sem
-mudar o job nem o orquestrador.
+O `fetchItems` lê os workers com uma única query **WQL** no data source
+`allActiveAndTerminatedWorkers` (`WorkdayClient.listConsolidatedWorkersViaWql`),
+trazendo ativos e terminados com todos os campos da Fase 1: `employeeID`,
+`hireDate`, `terminationDate`, `currentlyActive`, `company_ID` (legal entity),
+`primaryWork_Email`, `dateOfBirth`, `isManager`, `jobCode`, `nationalIdentifiers`.
 
-Enquanto isso:
-- workers sem `active=false`/`terminationDate` são tratados como admissão/atualização;
-- `cnpj` exige o de/para em `cnpj_mapping`; sem ele, o item falha (registrado), e o
-  lote segue;
-- `employeegroup_code`/`syndicate_code`/`workday_code` usam o default configurado
-  em `mapping.config` até você definir a origem/de-para.
+Validado no tenant de dev: 112 workers (82 ativos + 30 terminados), `hireDate` e
+`company_ID` em 100%. Requer o domínio WQL + escopo System no API Client
+(ver `docs/workday-novo-cliente.md`).
+
+**Campos ainda por configurar** (negócio, não técnico):
+- `cnpj` exige o de/para em `cnpj_mapping` (legal entity `company_ID` → CNPJ); sem
+  ele, o item falha (registrado) e o lote segue;
+- `employeegroup_code`/`syndicate_code`/`workday_code` usam o default em
+  `mapping.config` até você definir o valor/de-para;
+- `cpf` vem de `nationalIdentifiers`; ausente em parte do tenant de demo (EUA), mas
+  presente em tenant BR.
 
 ## Testes
 

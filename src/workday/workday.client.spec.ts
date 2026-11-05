@@ -37,7 +37,9 @@ describe('WorkdayClient', () => {
   describe('resolveServicesHost', () => {
     it('converte host da UI para -services1', () => {
       expect(
-        WorkdayClient.resolveServicesHost('https://odpimpl.wd119.myworkday.com/tenant_dev'),
+        WorkdayClient.resolveServicesHost(
+          'https://odpimpl.wd119.myworkday.com/tenant_dev',
+        ),
       ).toBe('https://odpimpl-services1.wd119.myworkday.com');
     });
 
@@ -53,7 +55,9 @@ describe('WorkdayClient', () => {
 
   it('monta o endpoint de token e obtém o access token', async () => {
     fetchMock
-      .mockResolvedValueOnce(mockResponse(200, { access_token: 'abc', expires_in: 3600 }))
+      .mockResolvedValueOnce(
+        mockResponse(200, { access_token: 'abc', expires_in: 3600 }),
+      )
       .mockResolvedValueOnce(mockResponse(200, { total: 0, data: [] }));
 
     const client = new WorkdayClient(makeConfig());
@@ -73,8 +77,12 @@ describe('WorkdayClient', () => {
 
   it('monta a URL REST com /ccx/api e substitui {tenant}', async () => {
     fetchMock
-      .mockResolvedValueOnce(mockResponse(200, { access_token: 'abc', expires_in: 3600 }))
-      .mockResolvedValueOnce(mockResponse(200, { total: 1, data: [{ id: '1', descriptor: 'Ana' }] }));
+      .mockResolvedValueOnce(
+        mockResponse(200, { access_token: 'abc', expires_in: 3600 }),
+      )
+      .mockResolvedValueOnce(
+        mockResponse(200, { total: 1, data: [{ id: '1', descriptor: 'Ana' }] }),
+      );
 
     const client = new WorkdayClient(makeConfig());
     const page = await client.getWorkersPage(3);
@@ -89,7 +97,9 @@ describe('WorkdayClient', () => {
 
   it('lista workers paginando a coleção', async () => {
     fetchMock
-      .mockResolvedValueOnce(mockResponse(200, { access_token: 'abc', expires_in: 3600 }))
+      .mockResolvedValueOnce(
+        mockResponse(200, { access_token: 'abc', expires_in: 3600 }),
+      )
       .mockResolvedValueOnce(
         mockResponse(200, {
           total: 3,
@@ -100,7 +110,10 @@ describe('WorkdayClient', () => {
         }),
       )
       .mockResolvedValueOnce(
-        mockResponse(200, { total: 3, data: [{ id: '3', descriptor: 'Carla' }] }),
+        mockResponse(200, {
+          total: 3,
+          data: [{ id: '3', descriptor: 'Carla' }],
+        }),
       );
 
     const client = new WorkdayClient(makeConfig());
@@ -113,7 +126,9 @@ describe('WorkdayClient', () => {
   });
 
   it('propaga erro de token como RestClientError', async () => {
-    fetchMock.mockResolvedValueOnce(mockResponse(400, { error: 'invalid_grant' }));
+    fetchMock.mockResolvedValueOnce(
+      mockResponse(400, { error: 'invalid_grant' }),
+    );
 
     const client = new WorkdayClient(makeConfig());
     await expect(client.getWorkersPage(3)).rejects.toMatchObject({

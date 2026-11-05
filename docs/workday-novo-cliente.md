@@ -70,6 +70,14 @@ Adicione uma linha por domínio. No campo **View/Modify Access** coloque
 | Worker Data: Organization Information | Staffing | Organizações / gestor |
 | Person Data: Personal Data | Personal Data | Dados pessoais |
 | Worker Data: Compensation Grade | Core Compensation | Grade salarial (se necessário) |
+| **Workday Query Language (WQL)** | **System** | **Consultar hireDate, terminationDate, status, company (legal entity), national IDs numa única query (Fase 1)** |
+
+> 🔑 **WQL é obrigatório para a Fase 1.** Datas de admissão/demissão, status
+> (ativo/terminado), legal entity (CNPJ) e national IDs (CPF) **não vêm pela REST
+> de recurso** do Workday — só via WQL (ou SOAP). Por isso o domínio
+> **Workday Query Language (WQL)** precisa estar liberado aqui **e** o escopo
+> **System** precisa estar no API Client (passo 5) — senão a chamada WQL retorna
+> `403 permission denied (S22)` mesmo com os demais domínios liberados.
 
 > ⚠️ **Ponto crítico:** `Get Only` sozinho **não basta** para a REST API — ele só libera
 > web services SOAP. Sem `View Only` a API responde `403 permission denied (S22)`.
@@ -102,13 +110,20 @@ Tarefa **Register API Client for Integrations**
 |---|---|
 | Client Name | `Pmovel` |
 | Non-Expiring Refresh Tokens | **Sim** |
-| Scope (Functional Areas) | **Staffing**, **Personal Data**, **Organizations and Roles** (+ *Time Off and Leave*, *Time Tracking*, *Core Compensation* se necessário) |
-| Include Workday Owned Scope | Sim |
+| Scope (Functional Areas) | **Staffing**, **Personal Data**, **Organizations and Roles**, **System** (+ *Time Off and Leave*, *Time Tracking*, *Core Compensation* se necessário) |
+| Include Workday Owned Scope | **Sim** (obrigatório — a área **System**/WQL só aparece na lista de Scope com isto marcado) |
 
 > ⚠️ Ao salvar, o Workday exibe **Client ID** e **Client Secret** — o secret aparece
 > **uma única vez**. Copie (copiar/colar, não transcrever) antes de clicar em *Done*.
 >
 > O escopo do client precisa cobrir a área funcional de cada domínio liberado na etapa 3.
+>
+> 🔑 **O escopo `System` é obrigatório para o WQL** (Fase 1). Sem ele, a chamada WQL
+> dá `403 S22` mesmo com o domínio WQL liberado. Se você adicionar o escopo depois,
+> **gere um novo refresh token** (5.2) — o token antigo não carrega o novo escopo.
+> Dica: se "System" não aparecer no campo Scope, confirme que **Include Workday
+> Owned Scope = Sim**; para achar a área funcional exata do seu tenant, rode a
+> tarefa **View Domain** no domínio `Workday Query Language (WQL)`.
 
 > ⚠️ Use um client registrado **no tenant do cliente**. Credenciais criadas no
 > developer.workday.com **não funcionam** no tenant (`400 Invalid request`).
@@ -182,9 +197,9 @@ OK — total: <N>; amostra: <nome> | <nome> | <nome>
 
 - [ ] `ISU_Pmovel` criado, senha sem expiração, sem sessão de UI
 - [ ] `ISSG_Pmovel` (Unconstrained) com `ISU_Pmovel`
-- [ ] Domínios com **View Only + Get Only**
+- [ ] Domínios com **View Only + Get Only** (incluindo **Workday Query Language (WQL)**)
 - [ ] Activate Pending Security Policy Changes executado
-- [ ] API Client for Integrations `Pmovel` com escopos corretos e refresh token sem expiração
+- [ ] API Client for Integrations `Pmovel` com escopos corretos (incluindo **System** para WQL) e refresh token sem expiração
 - [ ] Client ID / Secret copiados
 - [ ] Refresh token gerado para `ISU_Pmovel`
 - [ ] `.env` preenchido e `npm run test:connection` OK

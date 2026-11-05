@@ -32,7 +32,10 @@ export class WorkdayClient extends BaseRestClient {
 
   constructor(appConfig: AppConfigService) {
     const wd = appConfig.workday;
-    const servicesHost = WorkdayClient.resolveServicesHost(wd.tenantUrl, wd.servicesUrl);
+    const servicesHost = WorkdayClient.resolveServicesHost(
+      wd.tenantUrl,
+      wd.servicesUrl,
+    );
     // baseUrl = raiz dos serviços; paths REST adicionam /ccx/api/...
     super(servicesHost, 'WorkdayClient');
     this.tenant = wd.tenant;
@@ -51,7 +54,10 @@ export class WorkdayClient extends BaseRestClient {
     if (servicesUrl) {
       return new URL(servicesUrl).origin;
     }
-    const host = new URL(tenantUrl).hostname.replace(/^([^.]+)\./, '$1-services1.');
+    const host = new URL(tenantUrl).hostname.replace(
+      /^([^.]+)\./,
+      '$1-services1.',
+    );
     return `https://${host}`;
   }
 
@@ -78,7 +84,9 @@ export class WorkdayClient extends BaseRestClient {
    * tem content-type e autenticação próprios (não é Bearer).
    */
   protected async fetchToken(): Promise<AccessToken> {
-    const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+    const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString(
+      'base64',
+    );
     const res = await fetch(this.tokenEndpoint, {
       method: 'POST',
       headers: {
@@ -100,7 +108,10 @@ export class WorkdayClient extends BaseRestClient {
       );
     }
 
-    const json = JSON.parse(text) as { access_token: string; expires_in?: number };
+    const json = JSON.parse(text) as {
+      access_token: string;
+      expires_in?: number;
+    };
     const ttl = Number(json.expires_in ?? 3600);
     return {
       token: json.access_token,
@@ -114,15 +125,25 @@ export class WorkdayClient extends BaseRestClient {
    * Para dados ricos, use `getWorkerDetail` / `getWorkerSubresource`.
    */
   listWorkers(pageSize = 100): AsyncGenerator<WorkerSummary> {
-    return this.paginateOffset<WorkerSummary>('common/v1/{tenant}/workers', {}, pageSize);
+    return this.paginateOffset<WorkerSummary>(
+      'common/v1/{tenant}/workers',
+      {},
+      pageSize,
+    );
   }
 
   /** Busca uma página única de workers (útil para testes/diagnóstico). */
-  getWorkersPage(limit = 3, offset = 0): Promise<WorkdayCollection<WorkerSummary>> {
-    return this.get<WorkdayCollection<WorkerSummary>>('common/v1/{tenant}/workers', {
-      limit,
-      offset,
-    });
+  getWorkersPage(
+    limit = 3,
+    offset = 0,
+  ): Promise<WorkdayCollection<WorkerSummary>> {
+    return this.get<WorkdayCollection<WorkerSummary>>(
+      'common/v1/{tenant}/workers',
+      {
+        limit,
+        offset,
+      },
+    );
   }
 
   /** Detalhe de um worker pela coleção common/v1. */
@@ -154,6 +175,119 @@ export class WorkdayClient extends BaseRestClient {
     return this.paginateOffset<T>(path, params, pageSize);
   }
 
+  // --- WQL (Workday Query Language) ---
+
+  /**
+   * Executa uma query WQL (`GET wql/v1/{tenant}/data`) e itera todas as linhas,
+   * paginando por offset (limite máximo de 100 por página imposto pela API).
+   *
+   * Requer: domínio "Workday Query Language (WQL)" liberado no ISSG + escopo
+   * "System" no API Client (ver docs/workday-novo-cliente.md).
+   */
+  async *queryWql<T = Record<string, unknown>>(
+    query: string,
+    pageSize = 100,
+  ): AsyncGenerator<T> {
+    const singleLine = query.replace(/\s+/g, ' ').trim();
+    for (let offset = 0; ; offset += pageSize) {
+      const page = await this.get<{ data?: T[]; total?: number }>(
+        'wql/v1/{tenant}/data',
+        { query: singleLine, limit: pageSize, offset },
+      );
+      const data = page.data ?? [];
+      yield* data;
+      if (
+        data.length < pageSize ||
+        offset + data.length >= (page.total ?? Infinity)
+      ) {
+        return;
+      }
+    }
+  }
+
+  /**
+   * Query WQL padrão da Fase 1: todos os workers (ativos e terminados) com os
+   * campos necessários para admissão/atualização/demissão. Os nomes dos campos
+   * foram descobertos no data source `allActiveAndTerminatedWorkers`
+   * (ver docs/de-para-workday-pmovel.md).
+   */
+  static readonly EMPLOYEES_WQL = `
+    SELECT employeeID,
+           legalNameInGeneralDisplayFormat,
+           primaryWork_Email,
+           hireDate,
+           terminationDate,
+           currentlyActive,
+           company_ID,
+           company,
+           dateOfBirth,
+           isManager,
+           jobCode,
+           nationalIdentifiers
+    FROM allActiveAndTerminatedWorkers
+  `;
+
+  /** Itera os workers da Fase 1 já consolidados, via WQL. */
+  async *listConsolidatedWorkersViaWql(): AsyncGenerator<ConsolidatedWorker> {
+    for await (const row of this.queryWql<Record<string, any>>(
+      WorkdayClient.EMPLOYEES_WQL,
+    )) {
+      yield WorkdayClient.consolidateFromWql(row);
+    }
+  }
+
+  /**
+   * Consolida um `ConsolidatedWorker` a partir de uma linha do WQL.
+   * Lógica pura (testável sem rede). Normaliza os campos que a API devolve como
+   * objeto (`company`) para o descritor/id legível.
+   */
+  static consolidateFromWql(row: Record<string, any>): ConsolidatedWorker {
+    const companyObj =
+      row.company && typeof row.company === 'object' ? row.company : undefined;
+    const active = WorkdayClient.toBool(row.currentlyActive);
+    return {
+      id: String(row.employeeID ?? ''),
+      descriptor: row.legalNameInGeneralDisplayFormat ?? '',
+      workerId: String(row.employeeID ?? ''),
+      email: WorkdayClient.extractEmail(row.primaryWork_Email),
+      dateOfBirth: row.dateOfBirth ?? undefined,
+      isManager: WorkdayClient.toBool(row.isManager),
+      jobTitle: row.jobCode ?? undefined,
+      // company_ID é o identificador legível da legal entity (ex.: "NLE USA").
+      legalEntity: row.company_ID ?? companyObj?.descriptor ?? undefined,
+      legalEntityId: row.company_ID ?? companyObj?.id ?? undefined,
+      hireDate: row.hireDate ?? null,
+      terminationDate: row.terminationDate ?? null,
+      active,
+      cpf: WorkdayClient.extractNationalId(row.nationalIdentifiers),
+    };
+  }
+
+  private static toBool(v: unknown): boolean {
+    return v === true || v === 'true' || v === 1 || v === '1';
+  }
+
+  /** primaryWork_Email pode vir string ou objeto/array; extrai a string. */
+  private static extractEmail(v: unknown): string | undefined {
+    if (typeof v === 'string') return v;
+    if (v && typeof v === 'object') {
+      const first = Object.values(v as Record<string, unknown>)[0];
+      return typeof first === 'string' ? first : undefined;
+    }
+    return undefined;
+  }
+
+  /** nationalIdentifiers pode vir array de objetos; extrai o primeiro id como CPF. */
+  private static extractNationalId(v: unknown): string | null {
+    if (Array.isArray(v) && v.length) {
+      const item = v[0] as Record<string, unknown>;
+      const id = item.id ?? item.nationalID ?? item.descriptor;
+      return id != null ? String(id) : null;
+    }
+    if (typeof v === 'string' && v) return v;
+    return null;
+  }
+
   /**
    * Monta o `ConsolidatedWorker` a partir dos endpoints disponíveis
    * (common/v1 + staffing/v6). Campos que dependem de WQL/SOAP (hireDate,
@@ -165,7 +299,9 @@ export class WorkdayClient extends BaseRestClient {
   async getConsolidatedWorker(id: string): Promise<ConsolidatedWorker> {
     const [common, staffing] = await Promise.all([
       this.getResource<Record<string, any>>(`common/v1/{tenant}/workers/${id}`),
-      this.getResource<Record<string, any>>(`staffing/v6/{tenant}/workers/${id}`),
+      this.getResource<Record<string, any>>(
+        `staffing/v6/{tenant}/workers/${id}`,
+      ),
     ]);
     return WorkdayClient.consolidate(id, common, staffing);
   }
@@ -187,8 +323,11 @@ export class WorkdayClient extends BaseRestClient {
       jobTitle: staffing?.primaryJob?.descriptor,
       countryAlpha2: country['ISO_3166-1_Alpha-2_Code'],
       countryAlpha3: country['ISO_3166-1_Alpha-3_Code'],
-      supervisoryOrganization: staffing?.primaryJob?.supervisoryOrganization?.descriptor,
-      legalEntityId: staffing?.primaryJob?.supervisoryOrganization?.Organization_Reference_ID,
+      supervisoryOrganization:
+        staffing?.primaryJob?.supervisoryOrganization?.descriptor,
+      legalEntityId:
+        staffing?.primaryJob?.supervisoryOrganization
+          ?.Organization_Reference_ID,
       legalEntity: staffing?.primaryJob?.supervisoryOrganization?.descriptor,
       // Gaps (WQL/SOAP) — ficam undefined até a decisão do usuário:
       hireDate: undefined,

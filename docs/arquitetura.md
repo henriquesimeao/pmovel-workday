@@ -79,12 +79,15 @@ Estende o `BaseRestClient`. Porta `src/config.js` + `src/workday-rest.js`:
   `WorkdayServicesUrl`).
 - `fetchToken`: `grant_type=refresh_token` com Basic auth (clientId:secret).
 - `resolveUrl`: paths relativos a `/ccx/api/` com `{tenant}` substituído.
-- Métodos: `listWorkers()` (paginado), `getWorkersPage()`, `getWorker(id)`,
-  `getResource()`/`paginateResource()` (sub-recursos e expansões, usados na
-  descoberta da Task 4 e pelos mapeadores).
+- Métodos REST: `listWorkers()`, `getWorkersPage()`, `getWorker(id)`,
+  `getResource()`/`paginateResource()`.
+- **WQL**: `queryWql(query)` (paginado) e `listConsolidatedWorkersViaWql()` —
+  uma única query no data source `allActiveAndTerminatedWorkers` traz os campos
+  ricos da Fase 1 (hireDate, terminationDate, status, company/legal entity,
+  dateOfBirth, nationalIdentifiers). Requer domínio WQL + escopo System.
 
-Validado contra o tenant de dev `wwglgmcdcl_extdev`: retorna os 82 workers,
-mesma saída do código de referência.
+Validado contra o tenant de dev `wwglgmcdcl_extdev`: 82 workers via REST e 112
+(82 ativos + 30 terminados) via WQL, com hireDate e company_ID em 100%.
 
 ## Cliente Pmovel (`pmovel/PmovelClient`)
 

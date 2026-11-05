@@ -64,9 +64,15 @@ export class EmployeeMapper {
       external_id: externalId,
       matricula,
       cnpj: cnpj ?? '',
-      name: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.name)),
-      email: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.email)),
-      cpf: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.cpf)),
+      name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.name),
+      ),
+      email: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.email),
+      ),
+      cpf: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.cpf),
+      ),
       employeegroup_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.employeegroup_code),
       ),
@@ -76,8 +82,12 @@ export class EmployeeMapper {
       workday_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.workday_code),
       ),
-      country: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.country)),
-      is_manager: Boolean(this.fields.resolve(worker, this.config.fields.is_manager)),
+      country: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.country),
+      ),
+      is_manager: Boolean(
+        this.fields.resolve(worker, this.config.fields.is_manager),
+      ),
       dt_admissao: this.optionalString(
         this.config.fields.dt_admissao
           ? this.fields.resolve(worker, this.config.fields.dt_admissao)
@@ -89,7 +99,9 @@ export class EmployeeMapper {
           : worker.dateOfBirth,
       ),
       job_position: this.config.fields.job_position
-        ? this.optionalString(this.fields.resolve(worker, this.config.fields.job_position))
+        ? this.optionalString(
+            this.fields.resolve(worker, this.config.fields.job_position),
+          )
         : undefined,
     };
 
@@ -111,7 +123,9 @@ export class EmployeeMapper {
   }
 
   /** Versão que não valida obrigatórios (para montar o update parcial). */
-  private async toCreateDtoSafe(worker: ConsolidatedWorker): Promise<CreateEmployeeDto> {
+  private async toCreateDtoSafe(
+    worker: ConsolidatedWorker,
+  ): Promise<CreateEmployeeDto> {
     try {
       return await this.toCreateDto(worker);
     } catch (e) {
@@ -123,15 +137,23 @@ export class EmployeeMapper {
     }
   }
 
-  private async buildPartial(worker: ConsolidatedWorker): Promise<CreateEmployeeDto> {
+  private async buildPartial(
+    worker: ConsolidatedWorker,
+  ): Promise<CreateEmployeeDto> {
     const cnpj = await this.resolveCnpj(worker);
     return {
       external_id: this.stringOrEmpty(worker[this.config.externalIdSource]),
       matricula: this.stringOrEmpty(worker[this.config.matriculaSource]),
       cnpj: cnpj ?? '',
-      name: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.name)),
-      email: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.email)),
-      cpf: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.cpf)),
+      name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.name),
+      ),
+      email: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.email),
+      ),
+      cpf: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.cpf),
+      ),
       employeegroup_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.employeegroup_code),
       ),
@@ -141,8 +163,12 @@ export class EmployeeMapper {
       workday_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.workday_code),
       ),
-      country: this.stringOrEmpty(this.fields.resolve(worker, this.config.fields.country)),
-      is_manager: Boolean(this.fields.resolve(worker, this.config.fields.is_manager)),
+      country: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.country),
+      ),
+      is_manager: Boolean(
+        this.fields.resolve(worker, this.config.fields.is_manager),
+      ),
       dt_admissao: this.optionalString(worker.hireDate),
     };
   }
@@ -153,7 +179,9 @@ export class EmployeeMapper {
     }
     // cnpj como default/direct
     return Promise.resolve(
-      this.optionalString(this.fields.resolve(worker, this.config.fields.cnpj)) ?? null,
+      this.optionalString(
+        this.fields.resolve(worker, this.config.fields.cnpj),
+      ) ?? null,
     );
   }
 

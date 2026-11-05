@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PhaseSyncJob, SyncItemInput, ItemResult } from '../../sync/phase-sync-job';
+import {
+  PhaseSyncJob,
+  SyncItemInput,
+  ItemResult,
+} from '../../sync/phase-sync-job';
 import { SyncOperation } from '../../persistence/entities/sync-item.entity';
 import { WorkdayClient } from '../../workday/workday.client';
 import { PmovelClient } from '../../pmovel/pmovel.client';
@@ -36,18 +40,24 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
     private readonly mapper: EmployeeMapper,
   ) {}
 
-  async fetchItems(_since: Date | null): Promise<SyncItemInput<ConsolidatedWorker>[]> {
+  async fetchItems(
+    _since: Date | null,
+  ): Promise<SyncItemInput<ConsolidatedWorker>[]> {
+    // Uma única query WQL paginada traz ativos e terminados com todos os campos
+    // da Fase 1 (hireDate, terminationDate, status, company, etc.) — muito mais
+    // eficiente que N chamadas REST por worker.
     const items: SyncItemInput<ConsolidatedWorker>[] = [];
-    for await (const summary of this.workday.listWorkers()) {
-      const worker = await this.workday.getConsolidatedWorker(summary.id);
+    for await (const worker of this.workday.listConsolidatedWorkersViaWql()) {
       const externalId = worker.workerId || worker.id;
       items.push({ externalId, payload: worker });
     }
-    this.logger.log(`${items.length} worker(s) consolidados do Workday`);
+    this.logger.log(`${items.length} worker(s) consolidados do Workday (WQL)`);
     return items;
   }
 
-  async processItem(item: SyncItemInput<ConsolidatedWorker>): Promise<ItemResult> {
+  async processItem(
+    item: SyncItemInput<ConsolidatedWorker>,
+  ): Promise<ItemResult> {
     const worker = item.payload;
 
     // 1) Demissão: worker inativo/terminado.
@@ -70,10 +80,18 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
   ): Promise<ItemResult> {
     const existing = await this.pmovel.getEmployeeByExternalId(externalId);
     if (!existing) {
-      return { skipped: true, operation: SyncOperation.NONE, summary: 'inexistente no Pmovel' };
+      return {
+        skipped: true,
+        operation: SyncOperation.NONE,
+        summary: 'inexistente no Pmovel',
+      };
     }
     if (existing.active === false) {
-      return { skipped: true, operation: SyncOperation.NONE, summary: 'já inativo' };
+      return {
+        skipped: true,
+        operation: SyncOperation.NONE,
+        summary: 'já inativo',
+      };
     }
     await this.pmovel.inactivateEmployeeByExternalId(externalId, {
       dt_demissao: worker.terminationDate ?? null,
@@ -107,7 +125,10 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
       if (e instanceof RestClientError && EmployeeSyncJob.isAlreadyExists(e)) {
         const dto = await this.mapper.toUpdateDto(worker);
         await this.pmovel.updateEmployeeByExternalId(externalId, dto);
-        return { operation: SyncOperation.UPDATE, summary: 'já existia → atualizado' };
+        return {
+          operation: SyncOperation.UPDATE,
+          summary: 'já existia → atualizado',
+        };
       }
       throw e;
     }

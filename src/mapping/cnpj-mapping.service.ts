@@ -13,6 +13,9 @@ export class CnpjMappingService {
 
   /** @returns o CNPJ, ou null se não houver de/para ativo para a legal entity. */
   resolveForWorker(worker: ConsolidatedWorker): Promise<string | null> {
-    return this.repo.resolveCnpj(worker.legalEntityId ?? null, worker.legalEntity ?? null);
+    return this.repo.resolveCnpj(
+      worker.legalEntityId ?? null,
+      worker.legalEntity ?? null,
+    );
   }
 }

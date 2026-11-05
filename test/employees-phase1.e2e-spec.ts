@@ -50,14 +50,11 @@ class FakePmovel {
   getEmployeeByExternalId = jest.fn(async (id: string) => this.store.get(id) ?? null);
 }
 
-/** Fake do WorkdayClient: lista workers configuráveis e os consolida. */
+/** Fake do WorkdayClient: emite workers consolidados via WQL. */
 class FakeWorkday {
   workers: ConsolidatedWorker[] = [];
-  async *listWorkers() {
-    for (const w of this.workers) yield { id: w.id, descriptor: w.descriptor };
-  }
-  async getConsolidatedWorker(id: string) {
-    return this.workers.find((w) => w.id === id)!;
+  async *listConsolidatedWorkersViaWql() {
+    for (const w of this.workers) yield w;
   }
 }
 
