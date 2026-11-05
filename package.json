@@ -1,0 +1,14 @@
+{
+  "name": "pmovel-integration-workday",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Integração Pmovel <-> Workday",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "test:connection": "node --env-file=.env src/test-connection.js",
+    "workers:list": "node --env-file=.env src/list-workers.js"
+  }
+}
