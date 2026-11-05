@@ -121,6 +121,21 @@ campos confirmados como `direct`, gaps obrigatórios (`employeegroup_code`,
 `lookup`. Externalizar para arquivo/env é um próximo passo quando a operação
 precisar ajustar sem recompilar.
 
+## Sincronização (`sync/`)
+
+- **`PhaseSyncJob`** — contrato de um job de fase: `key` (cursor/lock),
+  `phase`/`type` (rótulos da run), `fetchItems(since)` (origem por diff) e
+  `processItem(item)` (aplica no destino).
+- **`SyncOrchestrator`** — executa um job em lote: lock (não roda o mesmo job em
+  paralelo), abre `sync_run`, processa item a item **continuando em falha**
+  (registra cada resultado em `sync_item`), atualiza o `sync_cursor` e fecha a
+  run. Se a origem falha, a run vira FAILED e o cursor não avança.
+- **`JobRegistry`** — registra/localiza jobs por `phase/type`.
+- **`SyncController`** — `POST /sync/:phase/:type` (dispara, 409 se já rodando),
+  `GET /sync/runs/:id` (resultado), `GET /sync/jobs` (lista).
+- **`SyncScheduler`** — cria um CronJob em runtime (cron de `SYNC_CRON`) quando
+  `SYNC_SCHEDULE_ENABLED=true`, disparando todos os jobs registrados.
+
 ## Decisões de projeto
 
 - **Integração via API, não banco direto.** O integrador é cliente de duas APIs
@@ -168,6 +183,6 @@ camada `config/` e nunca logadas.
 | 5 | PmovelClient | ✅ concluída |
 | 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration não aplicada contra MySQL real — ver docs/banco-de-dados.md) |
 | 7 | Camada de mapeamento | ✅ concluída |
-| 8 | SyncOrchestrator + gatilhos | pendente |
+| 8 | SyncOrchestrator + gatilhos | ✅ concluída |
 | 9 | EmployeeSyncJob (Fase 1) | pendente |
 | 10 | Documentação + roadmap | pendente |
