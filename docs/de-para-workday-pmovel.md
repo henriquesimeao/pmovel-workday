@@ -101,14 +101,23 @@ Worker 21001: campos obrigatórios ausentes: cnpj (empresa "NLE CAN" sem de/para
 Para liberar uma nova empresa: cadastre-a como cliente no Pmovel e insira o par
 (`legalEntityId`, `cnpj`) em `cnpj_mapping`. O CNPJ vai só com números.
 
-Situação no tenant de dev (workers vistos no Workday):
+Situação no tenant de dev (workers vistos no Workday). Os clientes abaixo existem
+no Pmovel de desenvolvimento (cliente `workday`):
 
-| Empresa no Workday | Workers | Ativos | De/para |
-|---|---:|---:|---|
-| `NLE USA` | 66 | 36 | sim (`00111111000100`) |
-| `NLE CAN` | 15 | 15 | não |
-| Next Level Enterprises, PLC (UK) | 28 | 28 | não |
-| `ASI` | 3 | 3 | não |
+| Empresa no Workday | Chave em `cnpj_mapping` | CNPJ (Pmovel) | Workers | Ativos |
+|---|---|---|---:|---:|
+| Next Level Enterprises (USA) | `NLE USA` | `00111111000100` | 66 | 36 |
+| Next Level Enterprises, Ltd (Canada) | `NLE CAN` | `00111111000200` | 15 | 15 |
+| Next Level Enterprises, PLC (UK) | `9dff7a68…` (sem `company_ID`, usa o id interno) | `00111111000300` | 28 | 28 |
+| Advanced Solutions, Inc. (USA) | `ASI` | `00111111000400` | 3 | 3 |
+
+Ensaio com o resolvedor lendo do MySQL (sem gravar no Pmovel): dos 82 ativos,
+71 ficam prontos para criar/atualizar, distribuídos pelos 4 CNPJs, e 11 falham por
+e-mail (10) ou CPF (4) ausente. Nenhum falha por CNPJ. Os 30 demitidos seguem
+para `inactivate`.
+
+> O de/para fica na tabela `cnpj_mapping` do banco, não no git. Em outro ambiente
+> (homologação, produção), insira os pares com os CNPJs daquele ambiente.
 
 ## Decisões de negócio ainda abertas
 
