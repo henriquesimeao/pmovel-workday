@@ -64,7 +64,9 @@ describe('WorkdayClient.consolidateFromWql', () => {
       dateOfBirth: '1990-01-01',
       isManager: 'true',
       jobCode: 'Analista',
-      nationalIdentifiers: [{ id: '00000000000' }],
+      nationalIdentifiers: [
+        { id: 'a'.repeat(32), descriptor: '000.000.000-00 (BRA-CPF)' },
+      ],
     });
     expect(w.workerId).toBe('21001');
     expect(w.descriptor).toBe('Ana Souza');
@@ -93,6 +95,53 @@ describe('WorkdayClient.consolidateFromWql', () => {
       primaryWork_Email: { '0': 'x@y.com' },
     });
     expect(w.email).toBe('x@y.com');
+  });
+});
+
+describe('WorkdayClient.extractNationalId', () => {
+  const wid = 'f'.repeat(32);
+
+  it('lê o número do descriptor e devolve só os dígitos (BRA-CPF)', () => {
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid, descriptor: '123.456.789-09 (BRA-CPF)' },
+      ]),
+    ).toBe('12345678909');
+  });
+
+  it('nunca devolve o id interno do Workday', () => {
+    const cpf = WorkdayClient.extractNationalId([
+      { id: wid, descriptor: '123.456.789-09 (BRA-CPF)' },
+    ]);
+    expect(cpf).not.toBe(wid);
+  });
+
+  it('ignora documentos de outros países (SSN, SIN, NINO)', () => {
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid, descriptor: '000-00-0000 (USA-SSN)' },
+        { id: wid, descriptor: '000 000 000 (CAN-SIN)' },
+        { id: wid, descriptor: 'AA 00 00 00 A (GBR-NINO)' },
+      ]),
+    ).toBeNull();
+  });
+
+  it('escolhe o CPF entre vários documentos da pessoa', () => {
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid, descriptor: '000-00-0000 (USA-SSN)' },
+        { id: wid, descriptor: '123.456.789-09 (BRA-CPF)' },
+      ]),
+    ).toBe('12345678909');
+  });
+
+  it('retorna null para vazio, formato inesperado ou sem descriptor', () => {
+    expect(WorkdayClient.extractNationalId(undefined)).toBeNull();
+    expect(WorkdayClient.extractNationalId([])).toBeNull();
+    expect(WorkdayClient.extractNationalId([{ id: wid }])).toBeNull();
+    expect(
+      WorkdayClient.extractNationalId([{ id: wid, descriptor: 'sem padrão' }]),
+    ).toBeNull();
   });
 });
 

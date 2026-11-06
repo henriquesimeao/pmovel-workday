@@ -59,7 +59,7 @@ Campos WQL do data source `allActiveAndTerminatedWorkers`.
 | `external_id` | ✔ | `employeeID` | 🟢 | **Decisão aplicada:** `employeeID` (ex.: `21001`), legível e estável. |
 | `matricula` | ✔ | `employeeID` | 🟢 | Mesmo `employeeID`. |
 | `name` | ✔ | `legalNameInGeneralDisplayFormat` | 🟢 | Nome legal formatado. |
-| `cpf` | ✔ | `nationalIdentifiers` | 🟡 | Vem do WQL. No tenant de demo (EUA) está em ~70%; num tenant BR virá o CPF. Sem valor → item falha (registrado), lote segue. |
+| `cpf` | ✔ | `nationalIdentifiers` (número no `descriptor`, tipo `BRA-CPF`) | 🟡 | Cada documento vem como `{id, descriptor}`; o `id` é um código interno do Workday e **não** é o documento. O número está no `descriptor` (`"000.000.000-00 (BRA-CPF)"`). Só `BRA-CPF` vira CPF; SSN/SIN/NINO são ignorados. Sai só com dígitos. Quem não tem CPF falha como item (registrado), o lote segue. |
 | `email` | ✔ | `primaryWork_Email` | 🟢 | String limpa (o `email_Work` vem como objeto; usamos `primaryWork_Email`). |
 | `cnpj` | ✔ | `company_ID` → de/para `cnpj_mapping` | 🟢 | `company_ID` é a legal entity legível (ex.: `NLE USA`). O CNPJ real sai do de/para que você popula. |
 | `employeegroup_code` | ✔ | — (default) | 🔴 | Sem equivalente no Workday. **Decisão de negócio**: default fixo ou de-para por dimensão. Hoje `default: 'DEFAULT'`. |
@@ -118,6 +118,15 @@ para `inactivate`.
 
 > O de/para fica na tabela `cnpj_mapping` do banco, não no git. Em outro ambiente
 > (homologação, produção), insira os pares com os CNPJs daquele ambiente.
+
+## CPF: pessoas sem documento
+
+No tenant de dev, o Workday marca `hasNationalIdentifier = false` em 34 dos 112
+workers (sem nenhum documento). Os outros 78 têm documento, mas **todos
+estrangeiros**: 37 `USA-SSN`, 13 `CAN-SIN` e 28 `GBR-NINO`. Nenhum `BRA-CPF`.
+Por isso, no tenant de demo nenhum ativo passa na validação do CPF. Num tenant
+brasileiro o CPF virá como `BRA-CPF`. Quem não tiver CPF cadastrado no Workday
+não é criado no Pmovel e aparece como falha de item, para o RH completar o cadastro.
 
 ## Decisões de negócio ainda abertas
 

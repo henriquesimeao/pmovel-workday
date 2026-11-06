@@ -277,14 +277,31 @@ export class WorkdayClient extends BaseRestClient {
     return undefined;
   }
 
-  /** nationalIdentifiers pode vir array de objetos; extrai o primeiro id como CPF. */
-  private static extractNationalId(v: unknown): string | null {
-    if (Array.isArray(v) && v.length) {
-      const item = v[0] as Record<string, unknown>;
-      const id = item.id ?? item.nationalID ?? item.descriptor;
-      return id != null ? String(id) : null;
+  /**
+   * Extrai o CPF de `nationalIdentifiers`.
+   *
+   * Cada documento vem como `{ id, descriptor }`. O `id` é o identificador
+   * interno do Workday (hash de 32 caracteres), NUNCA o número do documento. O
+   * número está no `descriptor`, no formato `"<número> (<PAÍS>-<TIPO>)"`, por
+   * exemplo `"000.000.000-00 (BRA-CPF)"`.
+   *
+   * Só um documento brasileiro do tipo CPF é aceito como CPF; documentos de
+   * outros países (SSN, SIN, NINO...) são ignorados. Devolve só os dígitos, ou
+   * `null` quando a pessoa não tem CPF.
+   */
+  static extractNationalId(v: unknown): string | null {
+    if (!Array.isArray(v)) return null;
+    for (const item of v) {
+      const descriptor = (item as Record<string, unknown> | null)?.descriptor;
+      if (typeof descriptor !== 'string') continue;
+      const match = descriptor.match(/^(.*?)\s*\(([A-Za-z]{3})-([^)]+)\)\s*$/);
+      if (!match) continue;
+      const [, number, country, type] = match;
+      if (country.toUpperCase() === 'BRA' && type.trim().toUpperCase() === 'CPF') {
+        const digits = number.replace(/\D/g, '');
+        return digits || null;
+      }
     }
-    if (typeof v === 'string' && v) return v;
     return null;
   }
 
