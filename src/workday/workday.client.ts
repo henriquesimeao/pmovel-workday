@@ -278,31 +278,42 @@ export class WorkdayClient extends BaseRestClient {
   }
 
   /**
-   * Extrai o CPF de `nationalIdentifiers`.
+   * Extrai o documento que vai no campo `cpf` do Pmovel, a partir de
+   * `nationalIdentifiers`.
    *
    * Cada documento vem como `{ id, descriptor }`. O `id` é o identificador
    * interno do Workday (hash de 32 caracteres), NUNCA o número do documento. O
    * número está no `descriptor`, no formato `"<número> (<PAÍS>-<TIPO>)"`, por
    * exemplo `"000.000.000-00 (BRA-CPF)"`.
    *
-   * Só um documento brasileiro do tipo CPF é aceito como CPF; documentos de
-   * outros países (SSN, SIN, NINO...) são ignorados. Devolve só os dígitos, ou
-   * `null` quando a pessoa não tem CPF.
+   * Regra:
+   * 1. Se a pessoa tem um CPF brasileiro (`BRA-CPF`), usa ele, só com dígitos.
+   * 2. Senão, usa o documento principal dela (o primeiro da lista), do jeito que
+   *    o Workday formata (SSN, SIN, NINO...), sem o sufixo de país/tipo.
+   * 3. Sem nenhum documento legível, devolve `null`.
    */
   static extractNationalId(v: unknown): string | null {
     if (!Array.isArray(v)) return null;
+
+    const docs: Array<{ number: string; country: string; type: string }> = [];
     for (const item of v) {
       const descriptor = (item as Record<string, unknown> | null)?.descriptor;
       if (typeof descriptor !== 'string') continue;
       const match = descriptor.match(/^(.*?)\s*\(([A-Za-z]{3})-([^)]+)\)\s*$/);
       if (!match) continue;
-      const [, number, country, type] = match;
-      if (country.toUpperCase() === 'BRA' && type.trim().toUpperCase() === 'CPF') {
-        const digits = number.replace(/\D/g, '');
-        return digits || null;
-      }
+      const number = match[1].trim();
+      if (!number) continue;
+      docs.push({
+        number,
+        country: match[2].toUpperCase(),
+        type: match[3].trim().toUpperCase(),
+      });
     }
-    return null;
+
+    const cpf = docs.find((d) => d.country === 'BRA' && d.type === 'CPF');
+    if (cpf) return cpf.number.replace(/\D/g, '') || null;
+
+    return docs[0]?.number ?? null;
   }
 
   /**

@@ -116,23 +116,53 @@ describe('WorkdayClient.extractNationalId', () => {
     expect(cpf).not.toBe(wid);
   });
 
-  it('ignora documentos de outros países (SSN, SIN, NINO)', () => {
+  it('sem CPF, usa o documento principal estrangeiro, como o Workday formata', () => {
     expect(
       WorkdayClient.extractNationalId([
-        { id: wid, descriptor: '000-00-0000 (USA-SSN)' },
-        { id: wid, descriptor: '000 000 000 (CAN-SIN)' },
-        { id: wid, descriptor: 'AA 00 00 00 A (GBR-NINO)' },
+        { id: wid, descriptor: '123-45-6789 (USA-SSN)' },
       ]),
-    ).toBeNull();
+    ).toBe('123-45-6789');
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid, descriptor: '123 456 789 (CAN-SIN)' },
+      ]),
+    ).toBe('123 456 789');
   });
 
-  it('escolhe o CPF entre vários documentos da pessoa', () => {
+  it('preserva letras do documento estrangeiro (NINO britânico)', () => {
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid, descriptor: 'AB 12 34 56 C (GBR-NINO)' },
+      ]),
+    ).toBe('AB 12 34 56 C');
+  });
+
+  it('prefere o CPF brasileiro ao documento estrangeiro', () => {
     expect(
       WorkdayClient.extractNationalId([
         { id: wid, descriptor: '000-00-0000 (USA-SSN)' },
         { id: wid, descriptor: '123.456.789-09 (BRA-CPF)' },
       ]),
     ).toBe('12345678909');
+  });
+
+  it('com vários documentos estrangeiros, usa o primeiro da lista', () => {
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid, descriptor: '111-11-1111 (USA-SSN)' },
+        { id: wid, descriptor: '222 222 222 (CAN-SIN)' },
+      ]),
+    ).toBe('111-11-1111');
+  });
+
+  it('ignora itens ilegíveis e usa o próximo documento válido', () => {
+    expect(
+      WorkdayClient.extractNationalId([
+        { id: wid },
+        { id: wid, descriptor: 'sem padrão' },
+        { id: wid, descriptor: '111-11-1111 (USA-SSN)' },
+      ]),
+    ).toBe('111-11-1111');
   });
 
   it('retorna null para vazio, formato inesperado ou sem descriptor', () => {
