@@ -25,6 +25,9 @@ const configWithCpf: EmployeeMappingConfig = {
     employeegroup_code: { mode: 'default', value: 'GRP01' },
     syndicate_code: { mode: 'default', value: 'SIND01' },
     workday_code: { mode: 'default', value: 'JOR01' },
+    employeegroup_name: { mode: 'default', value: 'Grupo 01' },
+    syndicate_name: { mode: 'default', value: 'Sindicato 01' },
+    workday_name: { mode: 'default', value: 'Jornada 01' },
     job_position: {
       mode: 'direct',
       source: 'jobTitle',
@@ -61,6 +64,10 @@ describe('EmployeeMapper', () => {
     expect(dto.employeegroup_code).toBe('GRP01');
     expect(dto.syndicate_code).toBe('SIND01');
     expect(dto.workday_code).toBe('JOR01');
+    // code + name juntos: o Pmovel cadastra sozinho o que não existir
+    expect(dto.employeegroup_name).toBe('Grupo 01');
+    expect(dto.syndicate_name).toBe('Sindicato 01');
+    expect(dto.workday_name).toBe('Jornada 01');
   });
 
   it('usa valores default para os gaps (modo default)', async () => {
@@ -187,6 +194,21 @@ describe('EmployeeMapper', () => {
     });
   });
 
+  it('exige o name de grupo/sindicato/jornada (sem ele o Pmovel não cadastra)', async () => {
+    const mapper = new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), {
+      ...configWithCpf,
+      fields: {
+        ...configWithCpf.fields,
+        employeegroup_name: { mode: 'default', value: '' },
+      },
+    });
+    const err = (await mapper
+      .toCreateDto(consolidatedWorkerFixture)
+      .catch((e) => e)) as MappingError;
+    expect(err).toBeInstanceOf(MappingError);
+    expect(err.missingFields).toContain('employeegroup_name');
+  });
+
   it('lança MappingError listando campos obrigatórios ausentes', async () => {
     const mapper = new EmployeeMapper(
       fields,
@@ -251,6 +273,9 @@ describe('EmployeeMapper', () => {
     expect(update).not.toHaveProperty('employeegroup_code');
     expect(update).not.toHaveProperty('syndicate_code');
     expect(update).not.toHaveProperty('workday_code');
+    expect(update).not.toHaveProperty('employeegroup_name');
+    expect(update).not.toHaveProperty('syndicate_name');
+    expect(update).not.toHaveProperty('workday_name');
     // mas o create ainda os inclui
     const create = await mapper.toCreateDto(consolidatedWorkerFixture);
     expect(create.employeegroup_code).toBe('GRP01');

@@ -40,6 +40,10 @@ export interface EmployeeMappingConfig {
     employeegroup_code: FieldMappingRule;
     syndicate_code: FieldMappingRule;
     workday_code: FieldMappingRule;
+    // O Pmovel cria grupo/sindicato/jornada sozinho quando recebe code + name.
+    employeegroup_name: FieldMappingRule;
+    syndicate_name: FieldMappingRule;
+    workday_name: FieldMappingRule;
     country: FieldMappingRule;
     is_manager: FieldMappingRule;
     job_position?: FieldMappingRule;
@@ -59,6 +63,9 @@ type CreateEmployeeDtoWritable = {
   employeegroup_code: string;
   syndicate_code: string;
   workday_code: string;
+  employeegroup_name: string;
+  syndicate_name: string;
+  workday_name: string;
   name: string;
   email: string;
   cpf: string;
@@ -94,6 +101,10 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
     employeegroup_code: { mode: 'default', value: 'DEFAULT' },
     syndicate_code: { mode: 'default', value: 'DEFAULT' },
     workday_code: { mode: 'default', value: 'DEFAULT' },
+    // Sem o name o Pmovel não cadastra o código novo (retorna "not found").
+    employeegroup_name: { mode: 'default', value: 'DEFAULT' },
+    syndicate_name: { mode: 'default', value: 'DEFAULT' },
+    workday_name: { mode: 'default', value: 'DEFAULT' },
     // country não vem na query WQL atual; default BR (tenant brasileiro).
     country: { mode: 'default', value: 'BR' },
     is_manager: { mode: 'direct', source: 'isManager' },
@@ -104,5 +115,12 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
   },
   // Definidos só na admissão; nunca sobrescritos na atualização (podem ter sido
   // ajustados manualmente no Pmovel).
-  immutableOnUpdate: ['employeegroup_code', 'syndicate_code', 'workday_code'],
+  immutableOnUpdate: [
+    'employeegroup_code',
+    'employeegroup_name',
+    'syndicate_code',
+    'syndicate_name',
+    'workday_code',
+    'workday_name',
+  ],
 };

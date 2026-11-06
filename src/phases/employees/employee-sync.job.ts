@@ -134,11 +134,17 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
     }
   }
 
-  /** Heurística de "já existe": 409, ou 400/422 com menção a duplicidade. */
+  /**
+   * Indica que o POST falhou porque o `external_id` já existe no Pmovel (o que
+   * justifica cair para PUT). A API usa a mesma expressão "already exists" para
+   * outro erro, que NÃO deve virar PUT: e-mail ou CPF que já pertencem a outra
+   * pessoa ("Employee with email X or CPF Y already exists"). Por isso só
+   * aceitamos a mensagem que cita o `external_id`.
+   */
   static isAlreadyExists(e: RestClientError): boolean {
     if (e.status === 409) return true;
     if (e.status === 400 || e.status === 422) {
-      return /exist|duplic|already|já existe/i.test(e.body ?? '');
+      return /external_id[^"]*already exists/i.test(e.body ?? '');
     }
     return false;
   }

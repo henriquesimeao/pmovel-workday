@@ -75,3 +75,43 @@ remove esses campos do corpo do update.
   upsert com fallback (`employee-sync.job.spec.ts`).
 - E2e: fluxo admissão → atualização → demissão, idempotência e falha de item
   isolada (`test/employees-phase1.e2e-spec.ts`), com Workday e Pmovel mockados.
+
+## Validação na API local do Pmovel (dev)
+
+A Fase 1 foi executada de ponta a ponta contra o Workday real e a API local do
+Pmovel (cliente `workday`, 4 empresas).
+
+**1ª execução (`POST /sync/employees/full`):** 112 workers lidos.
+
+| Resultado | Qtde | Detalhe |
+|---|---:|---|
+| Criados (`POST`) | 74 | ativos prontos |
+| Atualizados | 1 | colaborador criado antes, no teste de gravação |
+| Ignorados | 30 | demitidos que nunca existiram no Pmovel |
+| Falhas | 7 | ver abaixo |
+
+**2ª execução (idempotência):** 75 atualizações, 0 criações duplicadas, mesmas 7
+falhas e 30 ignorados.
+
+**Falhas esperadas** (registradas em `sync_item`, o lote continua):
+- 4 sem documento no Workday (3 também sem e-mail): `cpf` ausente.
+- 3 com e-mail ou documento que **já pertence a outro colaborador** no Pmovel
+  (`Employee with email X or CPF Y already exists`). Provavelmente a mesma pessoa
+  em duas empresas do Workday. É uma regra de negócio a decidir: o Pmovel não aceita
+  o mesmo e-mail/documento em dois cadastros.
+
+### O que a API do Pmovel exigiu e confirmou
+
+- **Grupo, sindicato e jornada**: enviar `_code` **e** `_name`. Com os dois, o
+  Pmovel cadastra sozinho o que não existir. Só com o `_code` ele responde
+  `Employee group with code X not found` (e `...and employee group name was not sent`).
+  O integrador envia `DEFAULT` / `DEFAULT` na admissão (`mapping.config`).
+- **Campo editado à mão não é sobrescrito**: o grupo foi alterado manualmente para
+  outro código e continuou igual após o `PUT` do integrador.
+- **Documento estrangeiro no campo `cpf`** e **e-mail gerado** foram aceitos.
+- **Nomes ficam em maiúsculas** no Pmovel (a API normaliza). O integrador não
+  compara nomes, então não há efeito.
+- **Dois erros de "já existe" diferentes**: `Employee with external_id X already
+  exists` (o integrador cai para `PUT`) e `Employee with email X or CPF Y already
+  exists` (erro real, não vira `PUT`). O detector de duplicidade só aceita o primeiro.
+

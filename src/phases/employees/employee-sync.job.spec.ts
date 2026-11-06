@@ -307,24 +307,52 @@ describe('EmployeeSyncJob.processItem', () => {
   });
 });
 
+describe('EmployeeSyncJob: conflito de e-mail/CPF', () => {
+  it('propaga o erro da API e NÃO tenta PUT', async () => {
+    const body = JSON.stringify({
+      message: ['Employee with email a@b.com or CPF 123 already exists.'],
+    });
+    const createEmployee = jest.fn().mockRejectedValue(new RestClientError('conflito', 400, body));
+    const updateEmployeeByExternalId = jest.fn();
+    const job = makeJob({
+      pmovel: {
+        getEmployeeByExternalId: jest.fn().mockResolvedValue(null),
+        createEmployee,
+        updateEmployeeByExternalId,
+      } as unknown as Partial<PmovelClient>,
+    });
+
+    await expect(
+      job.processItem({ externalId: '1001', payload: baseWorker }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(updateEmployeeByExternalId).not.toHaveBeenCalled();
+  });
+});
+
 describe('EmployeeSyncJob.isAlreadyExists', () => {
   it('reconhece 409', () => {
-    expect(
-      EmployeeSyncJob.isAlreadyExists(new RestClientError('', 409, '')),
-    ).toBe(true);
+    expect(EmployeeSyncJob.isAlreadyExists(new RestClientError('', 409, ''))).toBe(true);
   });
-  it('reconhece 400 com mensagem de duplicidade', () => {
-    expect(
-      EmployeeSyncJob.isAlreadyExists(
-        new RestClientError('', 400, 'already exists'),
-      ),
-    ).toBe(true);
+
+  it('reconhece external_id duplicado (mensagem real da API do Pmovel)', () => {
+    const body = JSON.stringify({
+      message: ['Employee with external_id 21411 already exists.'],
+      error: 'Bad Request',
+    });
+    expect(EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, body))).toBe(true);
   });
+
+  it('NÃO trata e-mail/CPF de outra pessoa como external_id duplicado', () => {
+    const body = JSON.stringify({
+      message: ['Employee with email a@b.com or CPF 123 already exists.'],
+      error: 'Bad Request',
+    });
+    expect(EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, body))).toBe(false);
+  });
+
   it('não reconhece 400 genérico', () => {
     expect(
-      EmployeeSyncJob.isAlreadyExists(
-        new RestClientError('', 400, 'invalid email'),
-      ),
+      EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, 'invalid email')),
     ).toBe(false);
   });
 });

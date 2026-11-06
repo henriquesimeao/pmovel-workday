@@ -30,6 +30,9 @@ const REQUIRED_CREATE_FIELDS: Array<keyof CreateEmployeeDto> = [
   'employeegroup_code',
   'syndicate_code',
   'workday_code',
+  'employeegroup_name',
+  'syndicate_name',
+  'workday_name',
   'dt_admissao',
   'country',
   'is_manager',
@@ -74,11 +77,20 @@ export class EmployeeMapper {
       employeegroup_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.employeegroup_code),
       ),
+      employeegroup_name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.employeegroup_name),
+      ),
       syndicate_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.syndicate_code),
       ),
+      syndicate_name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.syndicate_name),
+      ),
       workday_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.workday_code),
+      ),
+      workday_name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.workday_name),
       ),
       country: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.country),
@@ -163,11 +175,20 @@ export class EmployeeMapper {
       employeegroup_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.employeegroup_code),
       ),
+      employeegroup_name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.employeegroup_name),
+      ),
       syndicate_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.syndicate_code),
       ),
+      syndicate_name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.syndicate_name),
+      ),
       workday_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.workday_code),
+      ),
+      workday_name: this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.workday_name),
       ),
       country: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.country),

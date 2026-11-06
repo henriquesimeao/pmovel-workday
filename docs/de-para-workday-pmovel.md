@@ -62,9 +62,9 @@ Campos WQL do data source `allActiveAndTerminatedWorkers`.
 | `cpf` | ✔ | `nationalIdentifiers` (número no `descriptor`) | 🟡 | Cada documento vem como `{id, descriptor}`; o `id` é um código interno do Workday e **não** é o documento. Regra: se a pessoa tem `BRA-CPF`, vai o CPF só com dígitos; senão vai o **documento principal** (o primeiro da lista), como o Workday formata (SSN, SIN, NINO...). Sem nenhum documento, falha como item (registrado), o lote segue. |
 | `email` | ✔ | `primaryWork_Email`; sem e-mail: `<documento>@<empresa>.com` | 🟢 | E-mail de trabalho quando existe. Sem ele, é gerado a partir do documento (campo `cpf`) e do nome da empresa. Ver a seção "E-mail gerado". |
 | `cnpj` | ✔ | `company_ID` → de/para `cnpj_mapping` | 🟢 | `company_ID` é a legal entity legível (ex.: `NLE USA`). O CNPJ real sai do de/para que você popula. |
-| `employeegroup_code` | ✔ | — (default) | 🔴 | Sem equivalente no Workday. **Decisão de negócio**: default fixo ou de-para por dimensão. Hoje `default: 'DEFAULT'`. |
-| `syndicate_code` | ✔ | — (default) | 🔴 | Idem. Sindicato é conceito da folha BR. |
-| `workday_code` | ✔ | — (default) | 🔴 | Idem. "Jornada"/escala do Pmovel. |
+| `employeegroup_code` / `employeegroup_name` | ✔ | — (default) | 🔴 | Sem equivalente no Workday. Enviados **juntos** (`DEFAULT`/`DEFAULT`): com os dois o Pmovel cadastra o grupo sozinho. Só na admissão. |
+| `syndicate_code` / `syndicate_name` | ✔ | — (default) | 🔴 | Idem. Enviados juntos; só na admissão. |
+| `workday_code` / `workday_name` | ✔ | — (default) | 🔴 | Idem (jornada). Enviados juntos; só na admissão. |
 | `dt_admissao` | ✔ | `hireDate` | 🟢 | Presente em 100% dos workers no tenant. |
 | `dt_demissao` | — | `terminationDate` | 🟢 | Presente nos terminados (usado na demissão/`inactivate`). |
 | `dt_nascimento` | — | `dateOfBirth` | 🟢 | PII — não logar valor. |
