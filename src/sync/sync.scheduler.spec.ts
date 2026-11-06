@@ -24,7 +24,9 @@ describe('SyncScheduler', () => {
 
     const run = jest.fn().mockResolvedValue(1);
     const orchestrator = { run } as unknown as SyncOrchestrator;
-    const config = { sync: { cron: '0 * * * *', scheduleEnabled: false } } as AppConfigService;
+    const config = {
+      sync: { cron: '0 * * * *', scheduleEnabled: false },
+    } as AppConfigService;
 
     const scheduler = new SyncScheduler(
       orchestrator,
@@ -48,9 +50,16 @@ describe('SyncScheduler', () => {
       .mockRejectedValueOnce(new SyncAlreadyRunningError('a', '1'))
       .mockResolvedValueOnce(2);
     const orchestrator = { run } as unknown as SyncOrchestrator;
-    const config = { sync: { cron: '0 * * * *', scheduleEnabled: false } } as AppConfigService;
+    const config = {
+      sync: { cron: '0 * * * *', scheduleEnabled: false },
+    } as AppConfigService;
 
-    const scheduler = new SyncScheduler(orchestrator, registry, config, {} as SchedulerRegistry);
+    const scheduler = new SyncScheduler(
+      orchestrator,
+      registry,
+      config,
+      {} as SchedulerRegistry,
+    );
 
     await expect(scheduler.runAll()).resolves.toBeUndefined();
     expect(run).toHaveBeenCalledTimes(2);
@@ -59,11 +68,18 @@ describe('SyncScheduler', () => {
   it('onModuleInit não agenda quando desabilitado', () => {
     const registry = new JobRegistry();
     const orchestrator = { run: jest.fn() } as unknown as SyncOrchestrator;
-    const config = { sync: { cron: '0 * * * *', scheduleEnabled: false } } as AppConfigService;
+    const config = {
+      sync: { cron: '0 * * * *', scheduleEnabled: false },
+    } as AppConfigService;
     const addCronJob = jest.fn();
     const schedulerRegistry = { addCronJob } as unknown as SchedulerRegistry;
 
-    const scheduler = new SyncScheduler(orchestrator, registry, config, schedulerRegistry);
+    const scheduler = new SyncScheduler(
+      orchestrator,
+      registry,
+      config,
+      schedulerRegistry,
+    );
     scheduler.onModuleInit();
 
     expect(addCronJob).not.toHaveBeenCalled();
@@ -72,11 +88,18 @@ describe('SyncScheduler', () => {
   it('onModuleInit agenda quando habilitado', () => {
     const registry = new JobRegistry();
     const orchestrator = { run: jest.fn() } as unknown as SyncOrchestrator;
-    const config = { sync: { cron: '0 * * * *', scheduleEnabled: true } } as AppConfigService;
+    const config = {
+      sync: { cron: '0 * * * *', scheduleEnabled: true },
+    } as AppConfigService;
     const addCronJob = jest.fn();
     const schedulerRegistry = { addCronJob } as unknown as SchedulerRegistry;
 
-    const scheduler = new SyncScheduler(orchestrator, registry, config, schedulerRegistry);
+    const scheduler = new SyncScheduler(
+      orchestrator,
+      registry,
+      config,
+      schedulerRegistry,
+    );
     scheduler.onModuleInit();
 
     expect(addCronJob).toHaveBeenCalledWith('sync-all', expect.anything());

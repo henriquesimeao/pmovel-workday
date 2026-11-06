@@ -35,7 +35,10 @@ export class CnpjMappingRepository {
    * Resolve o CNPJ ativo por id da legal entity (preferido) ou, na ausência,
    * pelo nome. Retorna null se não houver de/para ativo.
    */
-  async resolveCnpj(legalEntityId?: string | null, legalEntityName?: string | null): Promise<string | null> {
+  async resolveCnpj(
+    legalEntityId?: string | null,
+    legalEntityName?: string | null,
+  ): Promise<string | null> {
     if (legalEntityId) {
       const byId = await this.mappings.findOne({
         where: { legalEntityId, active: true },

@@ -25,7 +25,15 @@ export class SyncCursorRepository {
   }
 
   /** Atualiza (upsert) o cursor de um job. */
-  async save(jobKey: string, lastRunAt: Date, lastValue?: string | null): Promise<void> {
-    await this.cursors.save({ jobKey, lastRunAt, lastValue: lastValue ?? null });
+  async save(
+    jobKey: string,
+    lastRunAt: Date,
+    lastValue?: string | null,
+  ): Promise<void> {
+    await this.cursors.save({
+      jobKey,
+      lastRunAt,
+      lastValue: lastValue ?? null,
+    });
   }
 }

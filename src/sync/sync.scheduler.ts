@@ -27,7 +27,9 @@ export class SyncScheduler implements OnModuleInit {
   onModuleInit(): void {
     const { cron, scheduleEnabled } = this.config.sync;
     if (!scheduleEnabled) {
-      this.logger.log('Disparo agendado desabilitado (SYNC_SCHEDULE_ENABLED=false)');
+      this.logger.log(
+        'Disparo agendado desabilitado (SYNC_SCHEDULE_ENABLED=false)',
+      );
       return;
     }
 
@@ -48,7 +50,9 @@ export class SyncScheduler implements OnModuleInit {
           continue;
         }
         const message = e instanceof Error ? e.message : String(e);
-        this.logger.error(`Falha ao executar ${job.phase}/${job.type}: ${message}`);
+        this.logger.error(
+          `Falha ao executar ${job.phase}/${job.type}: ${message}`,
+        );
       }
     }
   }

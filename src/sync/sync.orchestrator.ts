@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SyncRunRepository } from '../persistence/sync-run.repository';
 import { SyncCursorRepository } from '../persistence/sync-cursor.repository';
-import { SyncItemStatus, SyncOperation } from '../persistence/entities/sync-item.entity';
+import {
+  SyncItemStatus,
+  SyncOperation,
+} from '../persistence/entities/sync-item.entity';
 import { PhaseSyncJob } from './phase-sync-job';
 
 /** Erro quando já há uma execução do mesmo job em andamento. */
@@ -39,14 +42,19 @@ export class SyncOrchestrator {
    * Executa um job. `trigger` indica a origem do disparo ('manual'/'scheduled').
    * @returns o id da run criada.
    */
-  async run(job: PhaseSyncJob, trigger: 'manual' | 'scheduled'): Promise<number> {
+  async run(
+    job: PhaseSyncJob,
+    trigger: 'manual' | 'scheduled',
+  ): Promise<number> {
     if (await this.runs.hasRunning(job.phase, job.type)) {
       throw new SyncAlreadyRunningError(job.phase, job.type);
     }
 
     const run = await this.runs.startRun(job.phase, job.type, trigger);
     const startedAt = new Date();
-    this.logger.log(`[run ${run.id}] iniciando ${job.phase}/${job.type} (${trigger})`);
+    this.logger.log(
+      `[run ${run.id}] iniciando ${job.phase}/${job.type} (${trigger})`,
+    );
 
     let items;
     try {
@@ -67,12 +75,16 @@ export class SyncOrchestrator {
         await this.runs.recordItem(run.id, {
           externalId: item.externalId,
           operation: result.operation,
-          status: result.skipped ? SyncItemStatus.SKIPPED : SyncItemStatus.SUCCESS,
+          status: result.skipped
+            ? SyncItemStatus.SKIPPED
+            : SyncItemStatus.SUCCESS,
           payloadSummary: result.summary ?? null,
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        this.logger.warn(`[run ${run.id}] item ${item.externalId} falhou: ${message}`);
+        this.logger.warn(
+          `[run ${run.id}] item ${item.externalId} falhou: ${message}`,
+        );
         await this.runs.recordItem(run.id, {
           externalId: item.externalId,
           operation: SyncOperation.NONE,

@@ -14,12 +14,7 @@ import { EmployeesModule } from './phases/employees/employees.module';
  * - EmployeesModule: Fase 1 (colaboradores). Registra seu job no SyncModule.
  */
 @Module({
-  imports: [
-    AppConfigModule,
-    PersistenceModule,
-    SyncModule,
-    EmployeesModule,
-  ],
+  imports: [AppConfigModule, PersistenceModule, SyncModule, EmployeesModule],
   controllers: [HealthController],
 })
 export class AppModule {}

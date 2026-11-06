@@ -32,7 +32,11 @@ describe('Persistence repositories (SQLite in-memory)', () => {
         }),
         TypeOrmModule.forFeature([SyncRun, SyncItem, CnpjMapping, SyncCursor]),
       ],
-      providers: [SyncRunRepository, SyncCursorRepository, CnpjMappingRepository],
+      providers: [
+        SyncRunRepository,
+        SyncCursorRepository,
+        CnpjMappingRepository,
+      ],
     }).compile();
 
     runs = moduleRef.get(SyncRunRepository);
@@ -77,7 +81,9 @@ describe('Persistence repositories (SQLite in-memory)', () => {
     expect(loaded!.skippedCount).toBe(1);
     expect(loaded!.items).toHaveLength(3);
 
-    const failed = loaded!.items.find((i) => i.status === SyncItemStatus.FAILURE);
+    const failed = loaded!.items.find(
+      (i) => i.status === SyncItemStatus.FAILURE,
+    );
     expect(failed!.errorMessage).toBe('falha simulada');
   });
 
@@ -119,7 +125,9 @@ describe('Persistence repositories (SQLite in-memory)', () => {
     });
 
     expect(await cnpj.resolveCnpj('SO01', null)).toBe('00000000000191');
-    expect(await cnpj.resolveCnpj(null, 'ACME Brasil LTDA')).toBe('00000000000191');
+    expect(await cnpj.resolveCnpj(null, 'ACME Brasil LTDA')).toBe(
+      '00000000000191',
+    );
     expect(await cnpj.resolveCnpj('INEXISTENTE', null)).toBeNull();
   });
 

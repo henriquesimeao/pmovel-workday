@@ -88,7 +88,10 @@ export class SyncRunRepository {
 
   /** Busca uma run com seus itens (para o endpoint GET /sync/runs/:id). */
   findById(runId: number): Promise<SyncRun | null> {
-    return this.runs.findOne({ where: { id: runId }, relations: { items: true } });
+    return this.runs.findOne({
+      where: { id: runId },
+      relations: { items: true },
+    });
   }
 
   /** Indica se existe uma run RUNNING para o par phase/type (lock simples). */

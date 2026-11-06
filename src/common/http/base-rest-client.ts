@@ -99,11 +99,14 @@ export abstract class BaseRestClient {
       const res = await fetch(url, {
         method,
         headers: this.buildHeaders(token, options),
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        body:
+          options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
 
       if (res.status === 401 && attempt === 0) {
-        this.logger.debug(`401 em ${method} ${url} — renovando token e repetindo`);
+        this.logger.debug(
+          `401 em ${method} ${url} — renovando token e repetindo`,
+        );
         continue;
       }
 
@@ -123,19 +126,33 @@ export abstract class BaseRestClient {
     throw new Error('request: estado inesperado');
   }
 
-  protected get<T>(path: string, params?: RequestOptions['params']): Promise<T> {
+  protected get<T>(
+    path: string,
+    params?: RequestOptions['params'],
+  ): Promise<T> {
     return this.request<T>('GET', path, { params });
   }
 
-  protected post<T>(path: string, body?: unknown, params?: RequestOptions['params']): Promise<T> {
+  protected post<T>(
+    path: string,
+    body?: unknown,
+    params?: RequestOptions['params'],
+  ): Promise<T> {
     return this.request<T>('POST', path, { body, params });
   }
 
-  protected put<T>(path: string, body?: unknown, params?: RequestOptions['params']): Promise<T> {
+  protected put<T>(
+    path: string,
+    body?: unknown,
+    params?: RequestOptions['params'],
+  ): Promise<T> {
     return this.request<T>('PUT', path, { body, params });
   }
 
-  protected delete<T>(path: string, params?: RequestOptions['params']): Promise<T> {
+  protected delete<T>(
+    path: string,
+    params?: RequestOptions['params'],
+  ): Promise<T> {
     return this.request<T>('DELETE', path, { params });
   }
 
@@ -156,7 +173,10 @@ export abstract class BaseRestClient {
       });
       const data = page.data ?? [];
       yield* data;
-      if (data.length < pageSize || offset + data.length >= (page.total ?? Infinity)) {
+      if (
+        data.length < pageSize ||
+        offset + data.length >= (page.total ?? Infinity)
+      ) {
         return;
       }
     }
@@ -172,7 +192,11 @@ export abstract class BaseRestClient {
     pageSize = 100,
   ): AsyncGenerator<T> {
     for (let page = 1; ; page++) {
-      const items = await this.get<T[]>(path, { ...params, page, limit: pageSize });
+      const items = await this.get<T[]>(path, {
+        ...params,
+        page,
+        limit: pageSize,
+      });
       const arr = items ?? [];
       yield* arr;
       if (arr.length < pageSize) {
@@ -193,7 +217,10 @@ export abstract class BaseRestClient {
     return url.toString();
   }
 
-  private buildHeaders(token: string, options: RequestOptions): Record<string, string> {
+  private buildHeaders(
+    token: string,
+    options: RequestOptions,
+  ): Record<string, string> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',

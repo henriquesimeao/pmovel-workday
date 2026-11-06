@@ -28,7 +28,9 @@ export class SyncController {
 
   @Get('jobs')
   listJobs() {
-    return this.registry.list().map((j) => ({ phase: j.phase, type: j.type, key: j.key }));
+    return this.registry
+      .list()
+      .map((j) => ({ phase: j.phase, type: j.type, key: j.key }));
   }
 
   @Post(':phase/:type')

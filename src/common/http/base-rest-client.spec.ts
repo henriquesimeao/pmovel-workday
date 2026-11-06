@@ -1,4 +1,8 @@
-import { BaseRestClient, AccessToken, RequestOptions } from './base-rest-client';
+import {
+  BaseRestClient,
+  AccessToken,
+  RequestOptions,
+} from './base-rest-client';
 import { RestClientError } from './rest-client.error';
 
 /**
@@ -31,10 +35,18 @@ class TestClient extends BaseRestClient {
   pRequest<T>(method: string, path: string, options?: RequestOptions) {
     return this.request<T>(method, path, options);
   }
-  pPaginateOffset<T>(path: string, params?: RequestOptions['params'], size?: number) {
+  pPaginateOffset<T>(
+    path: string,
+    params?: RequestOptions['params'],
+    size?: number,
+  ) {
     return this.paginateOffset<T>(path, params, size);
   }
-  pPaginatePage<T>(path: string, params?: RequestOptions['params'], size?: number) {
+  pPaginatePage<T>(
+    path: string,
+    params?: RequestOptions['params'],
+    size?: number,
+  ) {
     return this.paginatePage<T>(path, params, size);
   }
 }
@@ -70,8 +82,14 @@ describe('BaseRestClient', () => {
 
     expect(client.fetchTokenCalls).toBe(1);
     // Authorization com o mesmo token nas duas chamadas
-    const auth1 = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
-    const auth2 = (fetchMock.mock.calls[1][1] as RequestInit).headers as Record<string, string>;
+    const auth1 = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<
+      string,
+      string
+    >;
+    const auth2 = (fetchMock.mock.calls[1][1] as RequestInit).headers as Record<
+      string,
+      string
+    >;
     expect(auth1.Authorization).toBe('Bearer token-1');
     expect(auth2.Authorization).toBe('Bearer token-1');
   });
@@ -112,14 +130,18 @@ describe('BaseRestClient', () => {
       name: 'RestClientError',
       status: 400,
     });
-    await expect(client.pGet('resource')).rejects.toBeInstanceOf(RestClientError);
+    await expect(client.pGet('resource')).rejects.toBeInstanceOf(
+      RestClientError,
+    );
   });
 
   it('não repete além de uma vez em 401 persistente', async () => {
     fetchMock.mockResolvedValue(mockResponse(401, 'nope'));
     const client = new TestClient();
 
-    await expect(client.pGet('resource')).rejects.toMatchObject({ status: 401 });
+    await expect(client.pGet('resource')).rejects.toMatchObject({
+      status: 401,
+    });
     // 1ª tentativa (401, retry) + 2ª tentativa (401, lança) = 2 chamadas
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -132,7 +154,9 @@ describe('BaseRestClient', () => {
 
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.body).toBe(JSON.stringify({ name: 'x' }));
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe(
+      'application/json',
+    );
   });
 
   it('retorna undefined em 204 sem corpo', async () => {
@@ -158,12 +182,20 @@ describe('BaseRestClient', () => {
   describe('paginateOffset (estilo Workday)', () => {
     it('itera todas as páginas até data menor que o pageSize', async () => {
       fetchMock
-        .mockResolvedValueOnce(mockResponse(200, { data: [{ id: 1 }, { id: 2 }], total: 3 }))
-        .mockResolvedValueOnce(mockResponse(200, { data: [{ id: 3 }], total: 3 }));
+        .mockResolvedValueOnce(
+          mockResponse(200, { data: [{ id: 1 }, { id: 2 }], total: 3 }),
+        )
+        .mockResolvedValueOnce(
+          mockResponse(200, { data: [{ id: 3 }], total: 3 }),
+        );
       const client = new TestClient();
 
       const items: Array<{ id: number }> = [];
-      for await (const item of client.pPaginateOffset<{ id: number }>('workers', {}, 2)) {
+      for await (const item of client.pPaginateOffset<{ id: number }>(
+        'workers',
+        {},
+        2,
+      )) {
         items.push(item);
       }
 
@@ -172,11 +204,17 @@ describe('BaseRestClient', () => {
     });
 
     it('para quando total é atingido mesmo com página cheia', async () => {
-      fetchMock.mockResolvedValueOnce(mockResponse(200, { data: [{ id: 1 }, { id: 2 }], total: 2 }));
+      fetchMock.mockResolvedValueOnce(
+        mockResponse(200, { data: [{ id: 1 }, { id: 2 }], total: 2 }),
+      );
       const client = new TestClient();
 
       const items: Array<{ id: number }> = [];
-      for await (const item of client.pPaginateOffset<{ id: number }>('workers', {}, 2)) {
+      for await (const item of client.pPaginateOffset<{ id: number }>(
+        'workers',
+        {},
+        2,
+      )) {
         items.push(item);
       }
 
@@ -193,7 +231,11 @@ describe('BaseRestClient', () => {
       const client = new TestClient();
 
       const items: Array<{ id: number }> = [];
-      for await (const item of client.pPaginatePage<{ id: number }>('employees', {}, 2)) {
+      for await (const item of client.pPaginatePage<{ id: number }>(
+        'employees',
+        {},
+        2,
+      )) {
         items.push(item);
       }
 

@@ -8,7 +8,11 @@ import { SyncCursorRepository } from './sync-cursor.repository';
 import { CnpjMappingRepository } from './cnpj-mapping.repository';
 
 const ENTITIES = [SyncRun, SyncItem, CnpjMapping, SyncCursor];
-const REPOSITORIES = [SyncRunRepository, SyncCursorRepository, CnpjMappingRepository];
+const REPOSITORIES = [
+  SyncRunRepository,
+  SyncCursorRepository,
+  CnpjMappingRepository,
+];
 
 /**
  * Módulo de persistência (MySQL via TypeORM).

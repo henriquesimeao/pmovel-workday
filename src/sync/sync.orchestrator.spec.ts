@@ -1,6 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { SyncRun, SyncItem, CnpjMapping, SyncCursor } from '../persistence/entities';
+import {
+  SyncRun,
+  SyncItem,
+  CnpjMapping,
+  SyncCursor,
+} from '../persistence/entities';
 import { SyncRunStatus } from '../persistence/entities/sync-run.entity';
 import { SyncOperation } from '../persistence/entities/sync-item.entity';
 import { SyncRunRepository } from '../persistence/sync-run.repository';
@@ -16,7 +21,9 @@ class FakeJob implements PhaseSyncJob<{ fail?: boolean; skip?: boolean }> {
   fetchError?: Error;
   lastSince: Date | null = null;
 
-  constructor(private readonly items: SyncItemInput<{ fail?: boolean; skip?: boolean }>[]) {}
+  constructor(
+    private readonly items: SyncItemInput<{ fail?: boolean; skip?: boolean }>[],
+  ) {}
 
   async fetchItems(since: Date | null) {
     this.lastSince = since;
@@ -24,9 +31,12 @@ class FakeJob implements PhaseSyncJob<{ fail?: boolean; skip?: boolean }> {
     return this.items;
   }
 
-  async processItem(item: SyncItemInput<{ fail?: boolean; skip?: boolean }>): Promise<ItemResult> {
+  async processItem(
+    item: SyncItemInput<{ fail?: boolean; skip?: boolean }>,
+  ): Promise<ItemResult> {
     if (item.payload.fail) throw new Error('falha simulada no item');
-    if (item.payload.skip) return { skipped: true, operation: SyncOperation.NONE };
+    if (item.payload.skip)
+      return { skipped: true, operation: SyncOperation.NONE };
     return { operation: SyncOperation.CREATE, summary: 'ok' };
   }
 }
