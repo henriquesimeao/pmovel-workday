@@ -33,12 +33,15 @@ npm run migration:generate -- src/persistence/migrations/NomeDaMigration
 
 A migration inicial (`InitialSchema`) cria as quatro tabelas no dialeto MySQL.
 
-> **Nota de verificação:** no ambiente de desenvolvimento desta entrega não havia
-> um MySQL acessível, então a migration **não foi aplicada contra um MySQL real**.
-> O mapeamento objeto-relacional foi validado por testes de integração em SQLite
-> em memória (`persistence.repositories.spec.ts`), e a migration usa a API
-> `Table`/`TableForeignKey` do TypeORM. Rode `npm run migration:run` contra o seu
-> MySQL e confirme a criação das tabelas antes de usar em produção.
+> **Verificação:** a migration foi aplicada num MySQL real (database
+> `integration_workday`, local) e o schema resultante foi comparado com as
+> entidades pelo schema builder do TypeORM: **0 divergências**. Isso exigiu
+> ajustar a migration para usar `datetime(6)` nas colunas de data e deixar o
+> TypeORM nomear os índices (os nomes fixos escritos à mão divergiam das
+> entidades e fariam o `migration:generate` gerar ruído).
+>
+> Para conferir em outro ambiente depois de `npm run migration:run`, compare o
+> schema com as entidades; o resultado esperado é nenhuma query pendente.
 
 ## Política de dados e PII
 

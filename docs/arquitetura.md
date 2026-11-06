@@ -184,7 +184,7 @@ camada `config/` e nunca logadas.
 | 3 | WorkdayClient | ✅ concluída |
 | 4 | Descoberta do schema + de/para | ✅ concluída (ver decisões pendentes no de/para) |
 | 5 | PmovelClient | ✅ concluída |
-| 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration não aplicada contra MySQL real — ver docs/banco-de-dados.md) |
+| 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration validada em MySQL real — ver docs/banco-de-dados.md) |
 | 7 | Camada de mapeamento | ✅ concluída |
 | 8 | SyncOrchestrator + gatilhos | ✅ concluída |
 | 9 | EmployeeSyncJob (Fase 1) | ✅ concluída (ver docs/fase-1-colaboradores.md) |
