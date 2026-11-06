@@ -58,7 +58,9 @@ export interface CreateEmployeeDto {
 }
 
 /** PUT /v3/employees/external_id/{external_id} — corpo (todos opcionais). */
-export type UpdateEmployeeDto = Partial<Omit<CreateEmployeeDto, 'cnpj' | 'external_id'>> & {
+export type UpdateEmployeeDto = Partial<
+  Omit<CreateEmployeeDto, 'cnpj' | 'external_id'>
+> & {
   workday_start_date?: string | null;
 };
 

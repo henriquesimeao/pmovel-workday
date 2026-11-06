@@ -24,8 +24,12 @@ function mockResponse(status: number, body: unknown): Response {
 
 /** Monta um JWT fake com um claim exp (não assinado — só para o cache). */
 function fakeJwt(expSeconds: number): string {
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify({ exp: expSeconds })).toString('base64url');
+  const header = Buffer.from(
+    JSON.stringify({ alg: 'HS256', typ: 'JWT' }),
+  ).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ exp: expSeconds })).toString(
+    'base64url',
+  );
   return `${header}.${payload}.signature`;
 }
 
@@ -74,7 +78,9 @@ describe('PmovelClient', () => {
 
     // 2ª chamada: create com Bearer
     const createInit = fetchMock.mock.calls[1][1] as RequestInit;
-    expect((createInit.headers as Record<string, string>).Authorization).toBe(`Bearer ${jwt}`);
+    expect((createInit.headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${jwt}`,
+    );
   });
 
   it('reutiliza o token entre chamadas (login só uma vez)', async () => {
@@ -121,7 +127,9 @@ describe('PmovelClient', () => {
     const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe('https://tools.pmovel.com.br/v3/employees');
     expect((init as RequestInit).method).toBe('POST');
-    expect(JSON.parse(String((init as RequestInit).body)).external_id).toBe('1001');
+    expect(JSON.parse(String((init as RequestInit).body)).external_id).toBe(
+      '1001',
+    );
   });
 
   it('updateEmployeeByExternalId faz PUT na rota com external_id codificado', async () => {
@@ -134,7 +142,9 @@ describe('PmovelClient', () => {
     await client.updateEmployeeByExternalId('A/B 1', { name: 'Novo Nome' });
 
     const [url, init] = fetchMock.mock.calls[1];
-    expect(url).toBe('https://tools.pmovel.com.br/v3/employees/external_id/A%2FB%201');
+    expect(url).toBe(
+      'https://tools.pmovel.com.br/v3/employees/external_id/A%2FB%201',
+    );
     expect((init as RequestInit).method).toBe('PUT');
   });
 
@@ -145,20 +155,46 @@ describe('PmovelClient', () => {
       .mockResolvedValueOnce(mockResponse(204, ''));
 
     const client = new PmovelClient(makeConfig());
-    await client.inactivateEmployeeByExternalId('1001', { dt_demissao: '2026-01-31' });
+    await client.inactivateEmployeeByExternalId('1001', {
+      dt_demissao: '2026-01-31',
+    });
 
     const [url, init] = fetchMock.mock.calls[1];
     expect(url).toBe(
       'https://tools.pmovel.com.br/v3/employees/inactivate/external_id/1001',
     );
-    expect(JSON.parse(String((init as RequestInit).body)).dt_demissao).toBe('2026-01-31');
+    expect(JSON.parse(String((init as RequestInit).body)).dt_demissao).toBe(
+      '2026-01-31',
+    );
+  });
+
+  it('listEmployees retorna lista vazia em 404 (sem colaboradores no escopo)', async () => {
+    const jwt = fakeJwt(Math.floor(Date.now() / 1000) + 3600);
+    fetchMock
+      .mockResolvedValueOnce(mockResponse(200, { access_token: jwt }))
+      .mockResolvedValueOnce(
+        mockResponse(404, {
+          message: ['Employees not found for the provided client IDs.'],
+          error: 'Not Found',
+          status_code: 404,
+        }),
+      );
+
+    const client = new PmovelClient(makeConfig());
+    await expect(client.listEmployees()).resolves.toEqual([]);
   });
 
   it('getEmployeeByExternalId retorna null em 404', async () => {
     const jwt = fakeJwt(Math.floor(Date.now() / 1000) + 3600);
     fetchMock
       .mockResolvedValueOnce(mockResponse(200, { access_token: jwt }))
-      .mockResolvedValueOnce(mockResponse(404, { status_code: 404, error: 'Not Found', message: [] }));
+      .mockResolvedValueOnce(
+        mockResponse(404, {
+          status_code: 404,
+          error: 'Not Found',
+          message: [],
+        }),
+      );
 
     const client = new PmovelClient(makeConfig());
     const result = await client.getEmployeeByExternalId('9999');
@@ -172,11 +208,15 @@ describe('PmovelClient', () => {
       .mockResolvedValue(mockResponse(500, 'server error'));
 
     const client = new PmovelClient(makeConfig());
-    await expect(client.getEmployeeByExternalId('1')).rejects.toBeInstanceOf(RestClientError);
+    await expect(client.getEmployeeByExternalId('1')).rejects.toBeInstanceOf(
+      RestClientError,
+    );
   });
 
   it('propaga erro de login como RestClientError', async () => {
-    fetchMock.mockResolvedValueOnce(mockResponse(401, { message: 'Invalid credentials' }));
+    fetchMock.mockResolvedValueOnce(
+      mockResponse(401, { message: 'Invalid credentials' }),
+    );
 
     const client = new PmovelClient(makeConfig());
     await expect(client.listEmployees()).rejects.toMatchObject({

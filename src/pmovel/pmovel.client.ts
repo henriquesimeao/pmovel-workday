@@ -41,7 +41,10 @@ export class PmovelClient extends BaseRestClient {
   protected async fetchToken(): Promise<AccessToken> {
     const res = await fetch(this.resolveUrl('/v3/auth/login'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
       body: JSON.stringify({
         access_key_id: this.accessKeyId,
         secret_access_key: this.secretAccessKey,
@@ -135,7 +138,9 @@ export class PmovelClient extends BaseRestClient {
    * Retorna `null` em 404 (não encontrado), em vez de lançar — útil para a
    * decisão de upsert na Fase 1.
    */
-  async getEmployeeByExternalId(externalId: string): Promise<EmployeeResponse | null> {
+  async getEmployeeByExternalId(
+    externalId: string,
+  ): Promise<EmployeeResponse | null> {
     try {
       return await this.get<EmployeeResponse>(
         `/v3/employees/external_id/${encodeURIComponent(externalId)}`,
@@ -148,12 +153,25 @@ export class PmovelClient extends BaseRestClient {
     }
   }
 
-  /** GET /v3/employees (paginado por page/limit). */
-  listEmployees(params: ListEmployeesParams = {}): Promise<EmployeeResponse[]> {
-    return this.get<EmployeeResponse[]>('/v3/employees', {
-      limit: params.limit,
-      page: params.page,
-      include_inactive: params.include_inactive,
-    });
+  /**
+   * GET /v3/employees (paginado por page/limit).
+   * A API responde 404 ("Employees not found") quando não há colaboradores no
+   * escopo da credencial; tratamos como lista vazia, não como erro.
+   */
+  async listEmployees(
+    params: ListEmployeesParams = {},
+  ): Promise<EmployeeResponse[]> {
+    try {
+      return await this.get<EmployeeResponse[]>('/v3/employees', {
+        limit: params.limit,
+        page: params.page,
+        include_inactive: params.include_inactive,
+      });
+    } catch (e) {
+      if (e instanceof RestClientError && e.status === 404) {
+        return [];
+      }
+      throw e;
+    }
   }
 }
