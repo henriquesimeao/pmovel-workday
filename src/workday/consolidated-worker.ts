@@ -35,6 +35,8 @@ export interface ConsolidatedWorker {
   /** Legal entity/company do Workday (para resolver o CNPJ). */
   legalEntity?: string | null;
   legalEntityId?: string | null;
+  /** Nome legível da empresa (ex.: "Next Level Enterprises (USA)"). */
+  legalEntityName?: string | null;
   /** National ID / CPF (PII). */
   cpf?: string | null;
 }

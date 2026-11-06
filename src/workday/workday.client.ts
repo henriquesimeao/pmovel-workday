@@ -256,6 +256,7 @@ export class WorkdayClient extends BaseRestClient {
       // company_ID é o identificador legível da legal entity (ex.: "NLE USA").
       legalEntity: row.company_ID ?? companyObj?.descriptor ?? undefined,
       legalEntityId: row.company_ID ?? companyObj?.id ?? undefined,
+      legalEntityName: companyObj?.descriptor ?? row.company_ID ?? undefined,
       hireDate: row.hireDate ?? null,
       terminationDate: row.terminationDate ?? null,
       active,

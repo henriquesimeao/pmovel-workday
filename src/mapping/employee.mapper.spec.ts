@@ -107,6 +107,86 @@ describe('EmployeeMapper', () => {
     expect(err.message).toContain('cnpj_mapping');
   });
 
+  describe('e-mail sem cadastro no Workday', () => {
+    const mapper = () =>
+      new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), configWithCpf);
+
+    it('monta documento@empresa.com', async () => {
+      const dto = await mapper().toCreateDto({
+        ...consolidatedWorkerFixture,
+        email: undefined,
+        cpf: '123-45-6789',
+        legalEntityName: 'Next Level Enterprises (USA)',
+      });
+      expect(dto.email).toBe('123456789@nextlevelenterprisesusa.com');
+    });
+
+    it('limpa espaços, letras maiúsculas, vírgula, parênteses e acentos', async () => {
+      const dto = await mapper().toCreateDto({
+        ...consolidatedWorkerFixture,
+        email: undefined,
+        cpf: 'AB 12 34 56 C',
+        legalEntityName: 'Operações Brasil, S.A. (São Paulo)',
+      });
+      expect(dto.email).toBe('ab123456c@operacoesbrasilsasaopaulo.com');
+    });
+
+    it('usa legalEntity quando não há nome legível da empresa', async () => {
+      const dto = await mapper().toCreateDto({
+        ...consolidatedWorkerFixture,
+        email: undefined,
+        cpf: '00000000000',
+        legalEntityName: undefined,
+        legalEntity: 'NLE USA',
+      });
+      expect(dto.email).toBe('00000000000@nleusa.com');
+    });
+
+    it('o e-mail real do Workday tem prioridade', async () => {
+      const dto = await mapper().toCreateDto(consolidatedWorkerFixture);
+      expect(dto.email).toBe('fulano@example.com');
+    });
+
+    it('sem documento não gera e-mail e aponta email como ausente', async () => {
+      const err = (await mapper()
+        .toCreateDto({
+          ...consolidatedWorkerFixture,
+          email: undefined,
+          cpf: null,
+        })
+        .catch((e) => e)) as MappingError;
+      expect(err).toBeInstanceOf(MappingError);
+      expect(err.missingFields).toEqual(
+        expect.arrayContaining(['email', 'cpf']),
+      );
+    });
+
+    it('sem nome da empresa não gera e-mail', async () => {
+      const err = (await mapper()
+        .toCreateDto({
+          ...consolidatedWorkerFixture,
+          email: undefined,
+          legalEntityName: undefined,
+          legalEntity: undefined,
+        })
+        .catch((e) => e)) as MappingError;
+      expect(err.missingFields).toContain('email');
+    });
+
+    it('na atualização, não reenvia o e-mail gerado', async () => {
+      const update = await mapper().toUpdateDto({
+        ...consolidatedWorkerFixture,
+        email: undefined,
+      });
+      expect(update).not.toHaveProperty('email');
+    });
+
+    it('na atualização, reenvia o e-mail real do Workday', async () => {
+      const update = await mapper().toUpdateDto(consolidatedWorkerFixture);
+      expect(update.email).toBe('fulano@example.com');
+    });
+  });
+
   it('lança MappingError listando campos obrigatórios ausentes', async () => {
     const mapper = new EmployeeMapper(
       fields,

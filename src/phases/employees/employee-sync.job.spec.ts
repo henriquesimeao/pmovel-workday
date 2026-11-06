@@ -74,6 +74,7 @@ describe('WorkdayClient.consolidateFromWql', () => {
     expect(w.hireDate).toBe('2015-01-01');
     expect(w.active).toBe(true);
     expect(w.legalEntity).toBe('NLE BR');
+    expect(w.legalEntityName).toBe('NLE Brasil');
     expect(w.isManager).toBe(true);
     expect(w.cpf).toBe('00000000000');
   });

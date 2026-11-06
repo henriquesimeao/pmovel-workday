@@ -60,7 +60,7 @@ Campos WQL do data source `allActiveAndTerminatedWorkers`.
 | `matricula` | ✔ | `employeeID` | 🟢 | Mesmo `employeeID`. |
 | `name` | ✔ | `legalNameInGeneralDisplayFormat` | 🟢 | Nome legal formatado. |
 | `cpf` | ✔ | `nationalIdentifiers` (número no `descriptor`) | 🟡 | Cada documento vem como `{id, descriptor}`; o `id` é um código interno do Workday e **não** é o documento. Regra: se a pessoa tem `BRA-CPF`, vai o CPF só com dígitos; senão vai o **documento principal** (o primeiro da lista), como o Workday formata (SSN, SIN, NINO...). Sem nenhum documento, falha como item (registrado), o lote segue. |
-| `email` | ✔ | `primaryWork_Email` | 🟢 | String limpa (o `email_Work` vem como objeto; usamos `primaryWork_Email`). |
+| `email` | ✔ | `primaryWork_Email`; sem e-mail: `<documento>@<empresa>.com` | 🟢 | E-mail de trabalho quando existe. Sem ele, é gerado a partir do documento (campo `cpf`) e do nome da empresa. Ver a seção "E-mail gerado". |
 | `cnpj` | ✔ | `company_ID` → de/para `cnpj_mapping` | 🟢 | `company_ID` é a legal entity legível (ex.: `NLE USA`). O CNPJ real sai do de/para que você popula. |
 | `employeegroup_code` | ✔ | — (default) | 🔴 | Sem equivalente no Workday. **Decisão de negócio**: default fixo ou de-para por dimensão. Hoje `default: 'DEFAULT'`. |
 | `syndicate_code` | ✔ | — (default) | 🔴 | Idem. Sindicato é conceito da folha BR. |
@@ -141,6 +141,31 @@ documento (4) ausentes.
 > **A confirmar na gravação de teste:** se a API do Pmovel aceita um documento
 > estrangeiro no campo `cpf` (por exemplo, se valida o formato de CPF). Se rejeitar,
 > o item falha com a mensagem da API, sem derrubar o lote.
+
+## E-mail gerado
+
+O e-mail é obrigatório no Pmovel. Quem não tem e-mail de trabalho no Workday recebe
+`<documento>@<empresa>.com`:
+
+- **documento**: o mesmo valor enviado no campo `cpf`;
+- **empresa**: nome legível da empresa no Workday (`company.descriptor`);
+- ambos em minúsculas, sem acentos e só com letras e números (espaços,
+  hífens, vírgulas e parênteses são removidos).
+
+| Documento | Empresa | E-mail gerado |
+|---|---|---|
+| `123-45-6789` | Next Level Enterprises (USA) | `123456789@nextlevelenterprisesusa.com` |
+| `AB 12 34 56 C` | Next Level Enterprises, PLC (UK) | `ab123456c@nextlevelenterprisesplcuk.com` |
+
+Sem documento (ou sem nome da empresa) o e-mail não é gerado e o item falha por
+campo ausente.
+
+**Na atualização o e-mail gerado não é reenviado**, para não sobrescrever um
+e-mail que alguém tenha corrigido à mão no Pmovel. O e-mail real do Workday, esse
+sim, é enviado normalmente.
+
+Ensaio no tenant de dev: dos 82 ativos, 78 ficam prontos (71 com e-mail real e 7
+com e-mail gerado). Os 4 restantes não têm documento nenhum.
 
 ## Decisões de negócio ainda abertas
 

@@ -67,9 +67,7 @@ export class EmployeeMapper {
       name: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.name),
       ),
-      email: this.stringOrEmpty(
-        this.fields.resolve(worker, this.config.fields.email),
-      ),
+      email: this.resolveEmail(worker),
       cpf: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.cpf),
       ),
@@ -125,6 +123,10 @@ export class EmployeeMapper {
     for (const field of this.config.immutableOnUpdate ?? []) {
       delete update[field as string];
     }
+    // E-mail gerado (fallback) não é reenviado: pode ter sido corrigido à mão.
+    if (!this.realEmail(worker)) {
+      delete update['email'];
+    }
     return update as UpdateEmployeeDto;
   }
 
@@ -154,9 +156,7 @@ export class EmployeeMapper {
       name: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.name),
       ),
-      email: this.stringOrEmpty(
-        this.fields.resolve(worker, this.config.fields.email),
-      ),
+      email: this.resolveEmail(worker),
       cpf: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.cpf),
       ),
@@ -177,6 +177,41 @@ export class EmployeeMapper {
       ),
       dt_admissao: this.optionalString(worker.hireDate),
     };
+  }
+
+  /** E-mail informado no Workday (sem fallback). Vazio quando não há. */
+  private realEmail(worker: ConsolidatedWorker): string {
+    return this.stringOrEmpty(
+      this.fields.resolve(worker, this.config.fields.email),
+    );
+  }
+
+  /**
+   * E-mail enviado ao Pmovel. Usa o do Workday; quando não existe, monta
+   * `<documento>@<empresa>.com` (só letras e números, minúsculas, sem acento),
+   * porque o e-mail é obrigatório no Pmovel. Sem documento ou sem nome da
+   * empresa, devolve vazio e a validação aponta o campo ausente.
+   */
+  private resolveEmail(worker: ConsolidatedWorker): string {
+    const real = this.realEmail(worker);
+    if (real) return real;
+
+    const document = this.stringOrEmpty(
+      this.fields.resolve(worker, this.config.fields.cpf),
+    );
+    const company = worker.legalEntityName ?? worker.legalEntity ?? '';
+    const local = EmployeeMapper.slug(document);
+    const domain = EmployeeMapper.slug(company);
+    return local && domain ? `${local}@${domain}.com` : '';
+  }
+
+  /** Minúsculas, sem acento, só letras e números. */
+  static slug(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
   }
 
   private resolveCnpj(worker: ConsolidatedWorker): Promise<string | null> {
