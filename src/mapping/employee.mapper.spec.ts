@@ -89,6 +89,24 @@ describe('EmployeeMapper', () => {
     expect((err as MappingError).missingFields).toContain('cnpj');
   });
 
+  it('mensagem de CNPJ ausente informa qual empresa precisa de de/para', async () => {
+    const mapper = new EmployeeMapper(
+      fields,
+      fakeCnpjService({}),
+      configWithCpf,
+    );
+    const err = (await mapper
+      .toCreateDto({
+        ...consolidatedWorkerFixture,
+        legalEntity: 'Next Level Enterprises, Ltd (Canada)',
+      })
+      .catch((e) => e)) as MappingError;
+
+    expect(err.message).toContain('cnpj');
+    expect(err.message).toContain('Next Level Enterprises, Ltd (Canada)');
+    expect(err.message).toContain('cnpj_mapping');
+  });
+
   it('lança MappingError listando campos obrigatórios ausentes', async () => {
     const mapper = new EmployeeMapper(
       fields,

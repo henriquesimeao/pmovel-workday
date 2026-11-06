@@ -84,6 +84,32 @@ Campos WQL do data source `allActiveAndTerminatedWorkers`.
 3. **CNPJ** resolvido por `company_ID` (legal entity) → tabela `cnpj_mapping`, que
    você popula por cliente.
 
+## Regra: uma empresa do Workday = um cliente no Pmovel
+
+Cada empresa (legal entity) do Workday precisa existir como **cliente no Pmovel**,
+com **CNPJ próprio**, e ter um registro em `cnpj_mapping`. Não se reaproveita um
+CNPJ para várias empresas.
+
+Consequência: workers de uma empresa **sem de/para** não são criados. O item
+falha e o lote continua. A mensagem em `sync_item.errorMessage` informa qual
+empresa falta cadastrar, por exemplo:
+
+```
+Worker 21001: campos obrigatórios ausentes: cnpj (empresa "NLE CAN" sem de/para em cnpj_mapping)
+```
+
+Para liberar uma nova empresa: cadastre-a como cliente no Pmovel e insira o par
+(`legalEntityId`, `cnpj`) em `cnpj_mapping`. O CNPJ vai só com números.
+
+Situação no tenant de dev (workers vistos no Workday):
+
+| Empresa no Workday | Workers | Ativos | De/para |
+|---|---:|---:|---|
+| `NLE USA` | 66 | 36 | sim (`00111111000100`) |
+| `NLE CAN` | 15 | 15 | não |
+| Next Level Enterprises, PLC (UK) | 28 | 28 | não |
+| `ASI` | 3 | 3 | não |
+
 ## Decisões de negócio ainda abertas
 
 Apenas os campos **sem equivalente no Workday** (todos obrigatórios no Pmovel),

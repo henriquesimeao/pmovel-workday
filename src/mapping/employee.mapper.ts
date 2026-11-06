@@ -105,7 +105,7 @@ export class EmployeeMapper {
         : undefined,
     };
 
-    this.validateRequired(dto, externalId);
+    this.validateRequired(dto, externalId, worker);
     return dto;
   }
 
@@ -191,7 +191,11 @@ export class EmployeeMapper {
     );
   }
 
-  private validateRequired(dto: CreateEmployeeDto, externalId: string): void {
+  private validateRequired(
+    dto: CreateEmployeeDto,
+    externalId: string,
+    worker: ConsolidatedWorker,
+  ): void {
     const missing: string[] = [];
     for (const field of REQUIRED_CREATE_FIELDS) {
       const value = dto[field];
@@ -202,8 +206,14 @@ export class EmployeeMapper {
       }
     }
     if (missing.length) {
+      // Quando falta o CNPJ, diz qual empresa precisa ser cadastrada: cada
+      // empresa do Workday deve ser um cliente no Pmovel, com de/para em
+      // cnpj_mapping.
+      const hint = missing.includes('cnpj')
+        ? ` (empresa "${worker.legalEntity ?? worker.legalEntityId ?? 'desconhecida'}" sem de/para em cnpj_mapping)`
+        : '';
       throw new MappingError(
-        `Worker ${externalId}: campos obrigatórios ausentes: ${missing.join(', ')}`,
+        `Worker ${externalId}: campos obrigatórios ausentes: ${missing.join(', ')}${hint}`,
         externalId,
         missing,
       );
