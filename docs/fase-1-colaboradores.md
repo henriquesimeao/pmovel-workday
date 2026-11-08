@@ -115,3 +115,35 @@ falhas e 30 ignorados.
   exists` (o integrador cai para `PUT`) e `Employee with email X or CPF Y already
   exists` (erro real, não vira `PUT`). O detector de duplicidade só aceita o primeiro.
 
+## Demissões: regra e validação
+
+Para cada worker demitido no Workday, o integrador **sempre consulta o Pmovel**
+(`GET` por `external_id`) antes de agir:
+
+| Situação no Pmovel | Ação |
+|---|---|
+| Não existe | ignora (`inexistente no Pmovel`): quem nunca foi admitido não é integrado |
+| Existe e está ativo (admitido) | `inactivate` com a data de demissão do Workday |
+| Existe e já está inativo | ignora (`já inativo`), sem inativar de novo |
+
+Validado na API real (dev) com um colaborador de teste: demitido inexistente foi
+ignorado; demitido admitido foi inativado (`active=false`, `dt_demissao` gravada);
+repetir a demissão foi ignorado como `já inativo`; a reativação
+(`reactivate` com `clean_dt_demissao`) devolveu o colaborador ao estado original.
+
+## Conflitos de e-mail/documento (investigação)
+
+Das 3 falhas `Employee with email X or CPF Y already exists`:
+
+- **21624 (UK)**: é duplicata dentro do próprio Workday. O **21135 (Canadá)** tem o
+  mesmo nome, o mesmo e-mail e a mesma data de admissão, ambos ativos, mas data de
+  nascimento e documento diferentes. O Pmovel já tem o 21135 e rejeita o 21624 por
+  e-mail repetido. É o cenário "mesma pessoa em duas empresas" (ou cadastro
+  duplicado no Workday).
+- **21609 (UK)** e **100011 (Canadá)**: não há outro worker com o mesmo e-mail,
+  documento ou nome no Workday, e nenhum dos 75 colaboradores do Pmovel visíveis à
+  credencial tem esse e-mail/documento (nem comparando só os dígitos). O conflito é
+  com um registro que a credencial não enxerga: outro cliente do Pmovel de
+  desenvolvimento ou um colaborador removido. O e-mail e o documento em conflito
+  estão em `sync_item.errorMessage` desses `external_id`, para consulta no banco do Pmovel.
+

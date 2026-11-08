@@ -245,6 +245,32 @@ describe('EmployeeSyncJob.processItem', () => {
     });
   });
 
+  it('worker terminado que já está inativo no Pmovel → SKIP (não inativa de novo)', async () => {
+    const inactivate = jest.fn();
+    const job = makeJob({
+      pmovel: {
+        getEmployeeByExternalId: jest
+          .fn()
+          .mockResolvedValue({ id: 1, active: false }),
+        inactivateEmployeeByExternalId: inactivate,
+      } as unknown as Partial<PmovelClient>,
+    });
+
+    const terminated: ConsolidatedWorker = {
+      ...baseWorker,
+      active: false,
+      terminationDate: '2026-01-31',
+    };
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: terminated,
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(result.summary).toBe('já inativo');
+    expect(inactivate).not.toHaveBeenCalled();
+  });
+
   it('worker terminado mas inexistente no Pmovel → SKIP', async () => {
     const job = makeJob({
       pmovel: {
