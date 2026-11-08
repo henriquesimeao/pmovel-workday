@@ -59,7 +59,7 @@ Campos WQL do data source `allActiveAndTerminatedWorkers`.
 | `external_id` | ✔ | `employeeID` | 🟢 | **Decisão aplicada:** `employeeID` (ex.: `21001`), legível e estável. |
 | `matricula` | ✔ | `employeeID` | 🟢 | Mesmo `employeeID`. |
 | `name` | ✔ | `legalNameInGeneralDisplayFormat` | 🟢 | Nome legal formatado. |
-| `cpf` | ✔ | `nationalIdentifiers` (número no `descriptor`) | 🟡 | Cada documento vem como `{id, descriptor}`; o `id` é um código interno do Workday e **não** é o documento. Regra: se a pessoa tem `BRA-CPF`, vai o CPF só com dígitos; senão vai o **documento principal** (o primeiro da lista), como o Workday formata (SSN, SIN, NINO...). Sem nenhum documento, falha como item (registrado), o lote segue. |
+| `cpf` | ✔ | `nationalIdentifiers` (número no `descriptor`) | 🟡 | CPF (`BRA-CPF`) só com dígitos; senão o documento principal. **Sem espaços**. `000000000` é recusado (a pessoa não é integrada). Ver a seção "CPF". |
 | `email` | ✔ | `primaryWork_Email`; sem e-mail: `<documento>@<empresa>.com` | 🟢 | E-mail de trabalho quando existe. Sem ele, é gerado a partir do documento (campo `cpf`) e do nome da empresa. Ver a seção "E-mail gerado". |
 | `cnpj` | ✔ | `company_ID` → de/para `cnpj_mapping` | 🟢 | `company_ID` é a legal entity legível (ex.: `NLE USA`). O CNPJ real sai do de/para que você popula. |
 | `employeegroup_code` / `employeegroup_name` | ✔ | — (default) | 🔴 | Sem equivalente no Workday. Enviados **juntos** (`DEFAULT`/`DEFAULT`): com os dois o Pmovel cadastra o grupo sozinho. Só na admissão. |
@@ -125,22 +125,33 @@ O campo `cpf` do Pmovel recebe:
 
 1. o **CPF** (`BRA-CPF`), só com dígitos, quando a pessoa tem;
 2. senão, o **documento principal** dela (o primeiro da lista de
-   `nationalIdentifiers`), do jeito que o Workday formata. Documento estrangeiro
-   não tem os caracteres removidos, porque o NINO britânico tem letras;
+   `nationalIdentifiers`), do jeito que o Workday formata, **sem espaços**;
 3. sem nenhum documento, o item falha e é registrado. Quem está nesse caso precisa
    ter o documento cadastrado no Workday.
+
+Regras do campo, aplicadas na criação **e** na atualização
+(`EmployeeMapper`):
+
+- **Sem espaços**: `AB 12 34 56 C` vai como `AB123456C`, `123 456 789` como
+  `123456789`. Hífens são mantidos (`123-45-6789`). Letras do NINO britânico também.
+- **Documento recusado**: `000000000` (valor de preenchimento que já existe no
+  Pmovel e causa conflito). A comparação ignora espaços, pontuação e caixa, então
+  `000 000 000` e `000-00-0000` também são recusados. Quem tem esse documento
+  **não é integrado**: o item falha com `documento inválido`, mesmo se tiver e-mail
+  real, e o e-mail gerado não é montado a partir dele. A lista fica em
+  `invalidDocuments`, em `src/mapping/mapping.config.ts`.
+- Demissão não depende do documento: um demitido com documento recusado ainda é
+  inativado se existir no Pmovel.
 
 Cada documento vem como `{id, descriptor}`. O número está no `descriptor`
 (`"123-45-6789 (USA-SSN)"`); o `id` é um código interno e nunca é usado.
 
 No tenant de dev, 34 dos 112 workers não têm documento nenhum
 (`hasNationalIdentifier = false`) e 78 têm: 37 `USA-SSN`, 13 `CAN-SIN` e
-28 `GBR-NINO`. Dos 82 ativos, 71 ficam prontos; 11 falham por e-mail (10) ou
-documento (4) ausentes.
+28 `GBR-NINO`. Um dos `CAN-SIN` é `000 000 000` e é recusado.
 
-> **A confirmar na gravação de teste:** se a API do Pmovel aceita um documento
-> estrangeiro no campo `cpf` (por exemplo, se valida o formato de CPF). Se rejeitar,
-> o item falha com a mensagem da API, sem derrubar o lote.
+> A API do Pmovel aceitou documento estrangeiro no campo `cpf` (confirmado na
+> gravação de teste).
 
 ## E-mail gerado
 
@@ -164,8 +175,8 @@ campo ausente.
 e-mail que alguém tenha corrigido à mão no Pmovel. O e-mail real do Workday, esse
 sim, é enviado normalmente.
 
-Ensaio no tenant de dev: dos 82 ativos, 78 ficam prontos (71 com e-mail real e 7
-com e-mail gerado). Os 4 restantes não têm documento nenhum.
+O e-mail gerado usa o documento já sem espaços. Pessoa com documento recusado
+não recebe e-mail gerado.
 
 ## Decisões de negócio ainda abertas
 

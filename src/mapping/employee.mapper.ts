@@ -61,6 +61,8 @@ export class EmployeeMapper {
     const externalId = this.stringOrEmpty(worker[this.config.externalIdSource]);
     const matricula = this.stringOrEmpty(worker[this.config.matriculaSource]);
 
+    this.rejectInvalidDocument(worker, externalId);
+
     const cnpj = await this.resolveCnpj(worker);
 
     const dto: CreateEmployeeDto = {
@@ -71,9 +73,7 @@ export class EmployeeMapper {
         this.fields.resolve(worker, this.config.fields.name),
       ),
       email: this.resolveEmail(worker),
-      cpf: this.stringOrEmpty(
-        this.fields.resolve(worker, this.config.fields.cpf),
-      ),
+      cpf: this.documentOf(worker).value,
       employeegroup_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.employeegroup_code),
       ),
@@ -124,6 +124,11 @@ export class EmployeeMapper {
    * obrigatórios: na atualização, só enviamos o que foi mapeado.
    */
   async toUpdateDto(worker: ConsolidatedWorker): Promise<UpdateEmployeeDto> {
+    // Quem tem documento inválido não é integrado, nem na atualização.
+    this.rejectInvalidDocument(
+      worker,
+      this.stringOrEmpty(worker[this.config.externalIdSource]),
+    );
     const create = await this.toCreateDtoSafe(worker);
     // Remove os campos que a atualização não aceita (chave e cnpj)...
     const { cnpj: _cnpj, external_id: _ext, ...rest } = create;
@@ -138,6 +143,10 @@ export class EmployeeMapper {
     // E-mail gerado (fallback) não é reenviado: pode ter sido corrigido à mão.
     if (!this.realEmail(worker)) {
       delete update['email'];
+    }
+    // Não envia o que não sabemos: string vazia apagaria o dado no Pmovel.
+    for (const key of Object.keys(update)) {
+      if (update[key] === '') delete update[key];
     }
     return update as UpdateEmployeeDto;
   }
@@ -169,9 +178,7 @@ export class EmployeeMapper {
         this.fields.resolve(worker, this.config.fields.name),
       ),
       email: this.resolveEmail(worker),
-      cpf: this.stringOrEmpty(
-        this.fields.resolve(worker, this.config.fields.cpf),
-      ),
+      cpf: this.documentOf(worker).value,
       employeegroup_code: this.stringOrEmpty(
         this.fields.resolve(worker, this.config.fields.employeegroup_code),
       ),
@@ -200,6 +207,47 @@ export class EmployeeMapper {
     };
   }
 
+  /**
+   * Documento que vai no campo `cpf`: sem espaços, e vazio quando é um dos
+   * `invalidDocuments`. `blocked` indica que havia um documento, mas ele foi
+   * recusado.
+   */
+  private documentOf(worker: ConsolidatedWorker): {
+    value: string;
+    blocked: boolean;
+  } {
+    const raw = this.stringOrEmpty(
+      this.fields.resolve(worker, this.config.fields.cpf),
+    );
+    const value = raw.replace(/\s+/g, '');
+    const key = EmployeeMapper.docKey(value);
+    const blocked =
+      !!key &&
+      (this.config.invalidDocuments ?? []).some(
+        (d) => EmployeeMapper.docKey(d) === key,
+      );
+    return { value: blocked ? '' : value, blocked };
+  }
+
+  /** Lança MappingError quando o documento do worker é um valor recusado. */
+  private rejectInvalidDocument(
+    worker: ConsolidatedWorker,
+    externalId: string,
+  ): void {
+    if (this.documentOf(worker).blocked) {
+      throw new MappingError(
+        `Worker ${externalId}: documento inválido, valor de preenchimento não aceito (${(this.config.invalidDocuments ?? []).join(', ')})`,
+        externalId,
+        ['cpf'],
+      );
+    }
+  }
+
+  /** Só letras e números, maiúsculas: base para comparar documentos. */
+  private static docKey(value: string): string {
+    return value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  }
+
   /** E-mail informado no Workday (sem fallback). Vazio quando não há. */
   private realEmail(worker: ConsolidatedWorker): string {
     return this.stringOrEmpty(
@@ -217,9 +265,7 @@ export class EmployeeMapper {
     const real = this.realEmail(worker);
     if (real) return real;
 
-    const document = this.stringOrEmpty(
-      this.fields.resolve(worker, this.config.fields.cpf),
-    );
+    const document = this.documentOf(worker).value;
     const company = worker.legalEntityName ?? worker.legalEntity ?? '';
     const local = EmployeeMapper.slug(document);
     const domain = EmployeeMapper.slug(company);

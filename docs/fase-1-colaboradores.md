@@ -147,3 +147,21 @@ Das 3 falhas `Employee with email X or CPF Y already exists`:
   desenvolvimento ou um colaborador removido. O e-mail e o documento em conflito
   estão em `sync_item.errorMessage` desses `external_id`, para consulta no banco do Pmovel.
 
+## Atualização: o que é e o que não é enviado
+
+O `PUT` da atualização:
+
+- **não envia** `cnpj`, `external_id` nem os campos de `immutableOnUpdate`
+  (grupo, sindicato e jornada, com `_code` e `_name`);
+- **não envia o e-mail gerado** (só o e-mail real do Workday);
+- **não envia campos vazios**: uma string vazia apagaria o dado no Pmovel;
+- **recusa quem tem documento inválido** (`000000000`), como na criação.
+
+### Execução de 05/11 (dev)
+
+Com o `cpf` sem espaços e a recusa de `000000000`: 75 atualizações (corrigindo o
+`cpf` dos 75 cadastros que tinham espaços; conferido na API: 0 com espaço, 0 com
+`000000000`), 30 demitidos ignorados e 7 falhas: 4 sem documento, o 100011
+(`documento inválido`) e o 21609 e 21624 (e-mail/documento já usados por outro
+cadastro, tratamento manual).
+

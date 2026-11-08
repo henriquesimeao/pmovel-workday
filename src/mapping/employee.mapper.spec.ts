@@ -114,6 +114,94 @@ describe('EmployeeMapper', () => {
     expect(err.message).toContain('cnpj_mapping');
   });
 
+  describe('documento no campo cpf', () => {
+    const mapper = () =>
+      new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), configWithCpf);
+    const comDoc = (cpf: string): ConsolidatedWorker => ({
+      ...consolidatedWorkerFixture,
+      cpf,
+    });
+
+    it('remove todos os espaços', async () => {
+      expect((await mapper().toCreateDto(comDoc('AB 12 34 56 C'))).cpf).toBe(
+        'AB123456C',
+      );
+      expect((await mapper().toCreateDto(comDoc('123 456 789'))).cpf).toBe(
+        '123456789',
+      );
+      expect((await mapper().toCreateDto(comDoc(' 123  456\t789 '))).cpf).toBe(
+        '123456789',
+      );
+    });
+
+    it('mantém hífens (só espaço é removido)', async () => {
+      expect((await mapper().toCreateDto(comDoc('123-45-6789'))).cpf).toBe(
+        '123-45-6789',
+      );
+    });
+
+    it('a atualização também envia o documento sem espaços', async () => {
+      const update = await mapper().toUpdateDto(comDoc('AB 12 34 56 C'));
+      expect(update.cpf).toBe('AB123456C');
+    });
+
+    it.each(['000000000', '000 000 000', '000-00-0000', ' 000.000.000 '])(
+      'rejeita o documento de preenchimento "%s" na criação',
+      async (doc) => {
+        const err = (await mapper()
+          .toCreateDto(comDoc(doc))
+          .catch((e) => e)) as MappingError;
+        expect(err).toBeInstanceOf(MappingError);
+        expect(err.missingFields).toContain('cpf');
+        expect(err.message).toContain('documento inválido');
+      },
+    );
+
+    it('rejeita também na atualização', async () => {
+      await expect(
+        mapper().toUpdateDto(comDoc('000 000 000')),
+      ).rejects.toBeInstanceOf(MappingError);
+    });
+
+    it('rejeita mesmo quando a pessoa tem e-mail real', async () => {
+      const err = (await mapper()
+        .toCreateDto({ ...comDoc('000000000'), email: 'a@b.com' })
+        .catch((e) => e)) as MappingError;
+      expect(err).toBeInstanceOf(MappingError);
+      expect(err.message).toContain('documento inválido');
+    });
+
+    it('não aceita documentos parecidos que não são o recusado', async () => {
+      expect((await mapper().toCreateDto(comDoc('000000001'))).cpf).toBe(
+        '000000001',
+      );
+      expect((await mapper().toCreateDto(comDoc('00000000000'))).cpf).toBe(
+        '00000000000',
+      );
+    });
+
+    it('a lista de documentos recusados é configurável', async () => {
+      const m = new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), {
+        ...configWithCpf,
+        invalidDocuments: ['000000000', '99999999999'],
+      });
+      await expect(m.toCreateDto(comDoc('999 999 999 99'))).rejects.toBeInstanceOf(
+        MappingError,
+      );
+    });
+
+    it('atualização não envia campos vazios (não apaga dado no Pmovel)', async () => {
+      const update = await mapper().toUpdateDto({
+        ...consolidatedWorkerFixture,
+        cpf: null,
+      });
+      expect(update).not.toHaveProperty('cpf');
+      for (const value of Object.values(update)) {
+        expect(value).not.toBe('');
+      }
+    });
+  });
+
   describe('e-mail sem cadastro no Workday', () => {
     const mapper = () =>
       new EmployeeMapper(fields, fakeCnpjService({ SO01: 'X' }), configWithCpf);

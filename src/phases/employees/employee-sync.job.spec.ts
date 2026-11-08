@@ -245,6 +245,31 @@ describe('EmployeeSyncJob.processItem', () => {
     });
   });
 
+  it('demissão não depende do documento: documento inválido ainda inativa', async () => {
+    const inactivate = jest.fn().mockResolvedValue(undefined);
+    const job = makeJob({
+      pmovel: {
+        getEmployeeByExternalId: jest
+          .fn()
+          .mockResolvedValue({ id: 1, active: true }),
+        inactivateEmployeeByExternalId: inactivate,
+      } as unknown as Partial<PmovelClient>,
+    });
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: {
+        ...baseWorker,
+        cpf: '000000000',
+        active: false,
+        terminationDate: '2026-01-31',
+      },
+    });
+
+    expect(result.operation).toBe(SyncOperation.INACTIVATE);
+    expect(inactivate).toHaveBeenCalled();
+  });
+
   it('worker terminado que já está inativo no Pmovel → SKIP (não inativa de novo)', async () => {
     const inactivate = jest.fn();
     const job = makeJob({

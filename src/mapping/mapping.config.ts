@@ -56,6 +56,13 @@ export interface EmployeeMappingConfig {
    * manualmente no Pmovel (ex.: grupo, sindicato, jornada).
    */
   immutableOnUpdate: Array<keyof CreateEmployeeDtoWritable>;
+  /**
+   * Documentos que não são aceitos no campo `cpf` (valores de preenchimento, que
+   * já existem no Pmovel e causam conflito). A comparação ignora espaços,
+   * pontuação e caixa: `000 000 000` e `000-00-0000` equivalem a `000000000`.
+   * Quem tem um desses documentos não é integrado.
+   */
+  invalidDocuments: string[];
 }
 
 /** Campos do CreateEmployeeDto que podem aparecer no update (para tipar immutableOnUpdate). */
@@ -123,4 +130,5 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
     'workday_code',
     'workday_name',
   ],
+  invalidDocuments: ['000000000'],
 };
