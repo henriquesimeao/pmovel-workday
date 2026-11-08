@@ -165,3 +165,39 @@ Com o `cpf` sem espaços e a recusa de `000000000`: 75 atualizações (corrigind
 (`documento inválido`) e o 21609 e 21624 (e-mail/documento já usados por outro
 cadastro, tratamento manual).
 
+## Como o Pmovel decide que um e-mail ou documento "já existe"
+
+A mensagem `Employee with email X or CPF Y already exists` vem de
+`pmovel_rest_api_nestjs` (`employees.service.ts` e `employees.repository.ts`). A
+regra, lida no código da API:
+
+- **É global**: não filtra por cliente. Vale contra todos os clientes do banco.
+- **Só conta colaborador ativo e não removido** (`e_active = true`,
+  `e_removed = false`, `permission` 0 ou 1). Removido ou inativo não bloqueia.
+- **Compara o e-mail e uma lista de variações do documento** (`getCpfs`):
+  o valor enviado e, se o documento **não for numérico**, também a versão **só com
+  os dígitos**. Se for numérico, também a versão formatada como CPF.
+
+Consequências para documentos estrangeiros:
+
+| Documento enviado | Variações comparadas |
+|---|---|
+| `000 000 000` | `000 000 000` e `000000000` |
+| `AB123456C` | `AB123456C` e `123456` |
+| `123-45-6789` | `123-45-6789` e `123456789` |
+
+Por isso um NINO como `AB123456C` pode colidir com qualquer colaborador ativo de
+qualquer cliente que tenha `123456` no campo `cpf`, e um SSN pode colidir com um SIN
+de mesmos dígitos. É a explicação do 100011 (`000000000`, já cadastrado) e a hipótese
+para o 21609. Para investigar um caso, procure no banco do Pmovel:
+
+```sql
+SELECT * FROM users
+WHERE (email = '<e-mail>' OR cpf IN ('<documento enviado>', '<só dígitos>'))
+  AND e_removed = 0 AND e_active = 1 AND permission IN (0, 1);
+```
+
+O integrador não consegue evitar a variação numérica, que a API gera sozinha.
+Se o falso conflito atrapalhar, a correção é no Pmovel (gerar a versão numérica só
+para documentos com formato de CPF).
+
