@@ -6,6 +6,7 @@ import {
   SyncOperation,
 } from '../persistence/entities/sync-item.entity';
 import { PhaseSyncJob } from './phase-sync-job';
+import { ManualReviewError } from './manual-review.error';
 
 /** Erro quando já há uma execução do mesmo job em andamento. */
 export class SyncAlreadyRunningError extends Error {
@@ -69,6 +70,8 @@ export class SyncOrchestrator {
 
     this.logger.log(`[run ${run.id}] ${items.length} item(ns) a processar`);
 
+    const manualReview: ManualReviewError[] = [];
+
     for (const item of items) {
       try {
         const result = await job.processItem(item);
@@ -82,6 +85,9 @@ export class SyncOrchestrator {
         });
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
+        if (e instanceof ManualReviewError) {
+          manualReview.push(e);
+        }
         this.logger.warn(
           `[run ${run.id}] item ${item.externalId} falhou: ${message}`,
         );
@@ -91,6 +97,16 @@ export class SyncOrchestrator {
           status: SyncItemStatus.FAILURE,
           errorMessage: message.slice(0, 2000),
         });
+      }
+    }
+
+    // Destaca, juntos, os itens que precisam de uma pessoa.
+    if (manualReview.length) {
+      this.logger.warn(
+        `[run ${run.id}] ATENÇÃO: ${manualReview.length} item(ns) para ${ManualReviewError.MARKER}:`,
+      );
+      for (const m of manualReview) {
+        this.logger.warn(`[run ${run.id}]   - ${m.reason} | ${m.highlight}`);
       }
     }
 

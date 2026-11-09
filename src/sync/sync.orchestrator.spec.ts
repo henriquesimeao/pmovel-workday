@@ -12,6 +12,8 @@ import { SyncRunRepository } from '../persistence/sync-run.repository';
 import { SyncCursorRepository } from '../persistence/sync-cursor.repository';
 import { SyncOrchestrator, SyncAlreadyRunningError } from './sync.orchestrator';
 import { PhaseSyncJob, SyncItemInput, ItemResult } from './phase-sync-job';
+import { ManualReviewError } from './manual-review.error';
+import { Logger } from '@nestjs/common';
 
 /** Job fake configurável para exercitar o orquestrador. */
 class FakeJob implements PhaseSyncJob<{ fail?: boolean; skip?: boolean }> {
@@ -92,6 +94,49 @@ describe('SyncOrchestrator', () => {
     const failedItems = run!.items.filter((i) => i.status === 'failure');
     expect(failedItems).toHaveLength(2);
     expect(failedItems[0].errorMessage).toContain('falha simulada');
+  });
+
+  it('itens para tratamento manual: ficam como falha, com marcação, e são resumidos no log', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const job = new FakeJob([
+      { externalId: '1', payload: {} },
+      { externalId: '21609', payload: { fail: true } },
+    ]);
+    job.processItem = async (item) => {
+      if (item.payload.fail) {
+        throw new ManualReviewError(
+          '21609',
+          'e-mail ou CPF já existe no Pmovel',
+          { external_id: '21609', 'e-mail': 'a@b.com', CPF: 'AB123456C' },
+          'localizar o cadastro',
+        );
+      }
+      return { operation: SyncOperation.CREATE };
+    };
+
+    const runId = await orchestrator.run(job, 'manual');
+    const run = await runs.findById(runId);
+
+    expect(run!.status).toBe(SyncRunStatus.COMPLETED);
+    expect(run!.successCount).toBe(1);
+    expect(run!.failureCount).toBe(1);
+    const failed = run!.items.find((i) => i.status === 'failure')!;
+    expect(failed.errorMessage).toContain('TRATAMENTO MANUAL');
+    expect(failed.errorMessage).toContain('e-mail=a@b.com');
+    expect(failed.errorMessage).toContain('CPF=AB123456C');
+
+    const logs = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logs).toContain('1 item(ns) para TRATAMENTO MANUAL');
+    expect(logs).toContain('e-mail=a@b.com | CPF=AB123456C');
+    warn.mockRestore();
+  });
+
+  it('sem itens para tratamento manual, não imprime o resumo', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    await orchestrator.run(new FakeJob([{ externalId: '1', payload: { fail: true } }]), 'manual');
+    const logs = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logs).not.toContain('para TRATAMENTO MANUAL');
+    warn.mockRestore();
   });
 
   it('atualiza o cursor ao concluir a run', async () => {

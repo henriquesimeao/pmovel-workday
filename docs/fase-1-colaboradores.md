@@ -201,3 +201,37 @@ O integrador não consegue evitar a variação numérica, que a API gera sozinha
 Se o falso conflito atrapalhar, a correção é no Pmovel (gerar a versão numérica só
 para documentos com formato de CPF).
 
+## Itens para tratamento manual
+
+Quando o Pmovel responde `Employee with email X or CPF Y already exists` (outra
+pessoa já usa esse e-mail ou documento), o integrador **não tenta resolver sozinho**.
+O item vira falha, é marcado como **TRATAMENTO MANUAL** e os dois valores aparecem em
+destaque. Isso vale na criação e na atualização.
+
+**No log da aplicação**, por item e num resumo ao fim da execução:
+
+```
+WARN [SyncOrchestrator] [run 4] item 21609 falhou: TRATAMENTO MANUAL | e-mail ou CPF já existe no Pmovel | external_id=21609 | e-mail=sarah.hill@workday.net | CPF=AB123456C | ação: localizar no Pmovel o colaborador ativo (de qualquer cliente) com esse e-mail ou CPF, inclusive só os dígitos do CPF
+WARN [SyncOrchestrator] [run 4] ATENÇÃO: 2 item(ns) para TRATAMENTO MANUAL:
+WARN [SyncOrchestrator] [run 4]   - e-mail ou CPF já existe no Pmovel | external_id=21609 | e-mail=sarah.hill@workday.net | CPF=AB123456C
+WARN [SyncOrchestrator] [run 4]   - e-mail ou CPF já existe no Pmovel | external_id=21624 | e-mail=djohnson@workday.net | CPF=JC222324B
+```
+
+**No banco**, o item fica em `sync_item` com `status = 'failure'` e a mensagem
+começando por `TRATAMENTO MANUAL`. Para listar o que está pendente na última execução:
+
+```sql
+SELECT externalId, errorMessage
+FROM sync_item
+WHERE errorMessage LIKE 'TRATAMENTO MANUAL%'
+  AND run_id = (SELECT MAX(id) FROM sync_run);
+```
+
+O CPF mostrado é o enviado pelo integrador (já sem espaços). Lembre que o Pmovel
+também compara a versão só com os dígitos (ver "Como o Pmovel decide que um e-mail
+ou documento já existe"). O item volta a ser tentado a cada execução e entra sozinho
+quando o conflito for resolvido no Pmovel.
+
+Não entram nessa marcação: `external_id` duplicado (o integrador atualiza), documento
+recusado (`000000000`) e campos obrigatórios ausentes. Esses são falhas comuns.
+

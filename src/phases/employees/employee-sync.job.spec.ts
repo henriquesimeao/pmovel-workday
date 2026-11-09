@@ -5,6 +5,7 @@ import { EmployeeMapper } from '../../mapping/employee.mapper';
 import { ConsolidatedWorker } from '../../workday/consolidated-worker';
 import { SyncOperation } from '../../persistence/entities/sync-item.entity';
 import { RestClientError } from '../../common/http/rest-client.error';
+import { ManualReviewError } from '../../sync/manual-review.error';
 import {
   workerCommonV1Fixture,
   workerStaffingV6Fixture,
@@ -358,12 +359,19 @@ describe('EmployeeSyncJob.processItem', () => {
   });
 });
 
-describe('EmployeeSyncJob: conflito de e-mail/CPF', () => {
-  it('propaga o erro da API e NÃO tenta PUT', async () => {
-    const body = JSON.stringify({
-      message: ['Employee with email a@b.com or CPF 123 already exists.'],
-    });
-    const createEmployee = jest.fn().mockRejectedValue(new RestClientError('conflito', 400, body));
+describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
+  const conflictBody = JSON.stringify({
+    message: [
+      'Employee with email sarah.hill@workday.net or CPF AB123456C already exists.',
+    ],
+    error: 'Bad Request',
+    status_code: 400,
+  });
+
+  it('na criação: vira ManualReviewError com e-mail e CPF em destaque, sem PUT', async () => {
+    const createEmployee = jest
+      .fn()
+      .mockRejectedValue(new RestClientError('conflito', 400, conflictBody));
     const updateEmployeeByExternalId = jest.fn();
     const job = makeJob({
       pmovel: {
@@ -373,10 +381,125 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF', () => {
       } as unknown as Partial<PmovelClient>,
     });
 
+    const err = (await job
+      .processItem({ externalId: '21609', payload: baseWorker })
+      .catch((e) => e)) as ManualReviewError;
+
+    expect(err).toBeInstanceOf(ManualReviewError);
+    expect(err.message).toContain('TRATAMENTO MANUAL');
+    expect(err.message).toContain('e-mail=sarah.hill@workday.net');
+    expect(err.message).toContain('CPF=AB123456C');
+    expect(err.message).toContain('external_id=21609');
+    expect(err.details).toEqual({
+      external_id: '21609',
+      'e-mail': 'sarah.hill@workday.net',
+      CPF: 'AB123456C',
+    });
+    expect(updateEmployeeByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('na atualização (PUT) também vira ManualReviewError', async () => {
+    const job = makeJob({
+      pmovel: {
+        getEmployeeByExternalId: jest
+          .fn()
+          .mockResolvedValue({ id: 1, active: true }),
+        updateEmployeeByExternalId: jest
+          .fn()
+          .mockRejectedValue(new RestClientError('conflito', 400, conflictBody)),
+      } as unknown as Partial<PmovelClient>,
+    });
+
+    const err = await job
+      .processItem({ externalId: '21609', payload: baseWorker })
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(ManualReviewError);
+    expect(err.message).toContain('CPF=AB123456C');
+  });
+
+  it('no fallback external_id → PUT, conflito de e-mail/CPF também vira tratamento manual', async () => {
+    const job = makeJob({
+      pmovel: {
+        getEmployeeByExternalId: jest.fn().mockResolvedValue(null),
+        createEmployee: jest
+          .fn()
+          .mockRejectedValue(
+            new RestClientError('dup', 409, 'external_id already exists'),
+          ),
+        updateEmployeeByExternalId: jest
+          .fn()
+          .mockRejectedValue(new RestClientError('conflito', 400, conflictBody)),
+      } as unknown as Partial<PmovelClient>,
+    });
+
+    const err = await job
+      .processItem({ externalId: '21609', payload: baseWorker })
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(ManualReviewError);
+  });
+
+  it('outros erros da API continuam como estão (não viram tratamento manual)', async () => {
+    const original = new RestClientError(
+      'campo inválido',
+      400,
+      JSON.stringify({ message: ['email must be an email'] }),
+    );
+    const job = makeJob({
+      pmovel: {
+        getEmployeeByExternalId: jest.fn().mockResolvedValue(null),
+        createEmployee: jest.fn().mockRejectedValue(original),
+      } as unknown as Partial<PmovelClient>,
+    });
+
     await expect(
       job.processItem({ externalId: '1001', payload: baseWorker }),
-    ).rejects.toMatchObject({ status: 400 });
-    expect(updateEmployeeByExternalId).not.toHaveBeenCalled();
+    ).rejects.toBe(original);
+  });
+
+  describe('parseEmailCpfConflict', () => {
+    it('extrai e-mail e CPF, inclusive CPF com espaços', () => {
+      const body = JSON.stringify({
+        message: ['Employee with email a@b.com or CPF 000 000 000 already exists.'],
+      });
+      expect(
+        EmployeeSyncJob.parseEmailCpfConflict(new RestClientError('', 400, body)),
+      ).toEqual({ email: 'a@b.com', cpf: '000 000 000' });
+    });
+
+    it('funciona com corpo que não é JSON', () => {
+      expect(
+        EmployeeSyncJob.parseEmailCpfConflict(
+          new RestClientError(
+            '',
+            400,
+            'Employee with email x@y.com or CPF 123 already exists.',
+          ),
+        ),
+      ).toEqual({ email: 'x@y.com', cpf: '123' });
+    });
+
+    it('não confunde com external_id duplicado', () => {
+      const body = JSON.stringify({
+        message: ['Employee with external_id 21411 already exists.'],
+      });
+      expect(
+        EmployeeSyncJob.parseEmailCpfConflict(new RestClientError('', 400, body)),
+      ).toBeNull();
+    });
+
+    it('ignora status que não são de validação', () => {
+      expect(
+        EmployeeSyncJob.parseEmailCpfConflict(
+          new RestClientError(
+            '',
+            500,
+            'Employee with email a@b.com or CPF 1 already exists.',
+          ),
+        ),
+      ).toBeNull();
+    });
   });
 });
 

@@ -10,6 +10,7 @@ import { PmovelClient } from '../../pmovel/pmovel.client';
 import { EmployeeMapper } from '../../mapping/employee.mapper';
 import { ConsolidatedWorker } from '../../workday/consolidated-worker';
 import { RestClientError } from '../../common/http/rest-client.error';
+import { ManualReviewError } from '../../sync/manual-review.error';
 
 /**
  * Fase 1 — sincronização de colaboradores (Workday → Pmovel).
@@ -103,15 +104,21 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
   private async applyUpdate(
     externalId: string,
     worker: ConsolidatedWorker,
+    summary = 'atualizado',
   ): Promise<ItemResult> {
     const dto = await this.mapper.toUpdateDto(worker);
-    await this.pmovel.updateEmployeeByExternalId(externalId, dto);
-    return { operation: SyncOperation.UPDATE, summary: 'atualizado' };
+    try {
+      await this.pmovel.updateEmployeeByExternalId(externalId, dto);
+    } catch (e) {
+      throw this.asManualReview(externalId, e);
+    }
+    return { operation: SyncOperation.UPDATE, summary };
   }
 
   /**
-   * Admissão com upsert: tenta POST; se a API indicar "já existe" (409, ou 400
-   * com mensagem de duplicidade), cai para PUT.
+   * Admissão com upsert: tenta POST; se a API indicar que o `external_id` já
+   * existe, cai para PUT. Conflito de e-mail/CPF com outra pessoa não é upsert:
+   * vira item para tratamento manual.
    */
   private async applyUpsertCreate(
     externalId: string,
@@ -123,15 +130,58 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
       return { operation: SyncOperation.CREATE, summary: 'admitido' };
     } catch (e) {
       if (e instanceof RestClientError && EmployeeSyncJob.isAlreadyExists(e)) {
-        const dto = await this.mapper.toUpdateDto(worker);
-        await this.pmovel.updateEmployeeByExternalId(externalId, dto);
-        return {
-          operation: SyncOperation.UPDATE,
-          summary: 'já existia → atualizado',
-        };
+        return this.applyUpdate(externalId, worker, 'já existia → atualizado');
       }
-      throw e;
+      throw this.asManualReview(externalId, e);
     }
+  }
+
+  /**
+   * Se o erro for "e-mail ou CPF já existe" (outra pessoa já usa esses dados no
+   * Pmovel), devolve um ManualReviewError com os dois valores em destaque.
+   * Qualquer outro erro é devolvido sem alteração.
+   */
+  private asManualReview(externalId: string, e: unknown): unknown {
+    if (!(e instanceof RestClientError)) return e;
+    const conflict = EmployeeSyncJob.parseEmailCpfConflict(e);
+    if (!conflict) return e;
+    return new ManualReviewError(
+      externalId,
+      'e-mail ou CPF já existe no Pmovel',
+      {
+        external_id: externalId,
+        'e-mail': conflict.email,
+        CPF: conflict.cpf,
+      },
+      'localizar no Pmovel o colaborador ativo (de qualquer cliente) com esse e-mail ou CPF, inclusive só os dígitos do CPF',
+    );
+  }
+
+  /**
+   * Lê "Employee with email X or CPF Y already exists." da resposta de erro e
+   * devolve os dois valores. Devolve null para qualquer outro erro, inclusive
+   * "Employee with external_id X already exists".
+   */
+  static parseEmailCpfConflict(
+    e: RestClientError,
+  ): { email: string; cpf: string } | null {
+    if (e.status !== 400 && e.status !== 409 && e.status !== 422) return null;
+
+    let text = e.body ?? '';
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown };
+      const message = Array.isArray(parsed.message)
+        ? parsed.message.join(' ')
+        : parsed.message;
+      if (typeof message === 'string') text = message;
+    } catch {
+      // corpo não é JSON: usa o texto como veio
+    }
+
+    const match = text.match(
+      /Employee with email (.+?) or CPF (.+?) already exists/i,
+    );
+    return match ? { email: match[1].trim(), cpf: match[2].trim() } : null;
   }
 
   /**
