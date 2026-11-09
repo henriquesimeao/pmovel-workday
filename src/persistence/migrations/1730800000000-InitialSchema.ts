@@ -39,7 +39,12 @@ export class InitialSchema1730800000000 implements MigrationInterface {
             length: '16',
             default: "'running'",
           },
-          { name: 'startedAt', type: 'datetime', precision: 6, default: 'CURRENT_TIMESTAMP(6)' },
+          {
+            name: 'startedAt',
+            type: 'datetime',
+            precision: 6,
+            default: 'CURRENT_TIMESTAMP(6)',
+          },
           { name: 'finishedAt', type: 'datetime', isNullable: true },
           { name: 'totalCount', type: 'int', default: 0 },
           { name: 'successCount', type: 'int', default: 0 },
@@ -120,7 +125,12 @@ export class InitialSchema1730800000000 implements MigrationInterface {
           { name: 'legalEntityName', type: 'varchar', length: '255' },
           { name: 'cnpj', type: 'varchar', length: '32' },
           { name: 'active', type: 'tinyint', width: 1, default: 1 },
-          { name: 'createdAt', type: 'datetime', precision: 6, default: 'CURRENT_TIMESTAMP(6)' },
+          {
+            name: 'createdAt',
+            type: 'datetime',
+            precision: 6,
+            default: 'CURRENT_TIMESTAMP(6)',
+          },
           {
             name: 'updatedAt',
             type: 'datetime',

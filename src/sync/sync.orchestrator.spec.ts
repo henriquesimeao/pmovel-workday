@@ -133,7 +133,10 @@ describe('SyncOrchestrator', () => {
 
   it('sem itens para tratamento manual, não imprime o resumo', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    await orchestrator.run(new FakeJob([{ externalId: '1', payload: { fail: true } }]), 'manual');
+    await orchestrator.run(
+      new FakeJob([{ externalId: '1', payload: { fail: true } }]),
+      'manual',
+    );
     const logs = warn.mock.calls.map((c) => String(c[0])).join('\n');
     expect(logs).not.toContain('para TRATAMENTO MANUAL');
     warn.mockRestore();

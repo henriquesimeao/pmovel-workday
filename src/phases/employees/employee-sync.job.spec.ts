@@ -406,7 +406,9 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
           .mockResolvedValue({ id: 1, active: true }),
         updateEmployeeByExternalId: jest
           .fn()
-          .mockRejectedValue(new RestClientError('conflito', 400, conflictBody)),
+          .mockRejectedValue(
+            new RestClientError('conflito', 400, conflictBody),
+          ),
       } as unknown as Partial<PmovelClient>,
     });
 
@@ -429,7 +431,9 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
           ),
         updateEmployeeByExternalId: jest
           .fn()
-          .mockRejectedValue(new RestClientError('conflito', 400, conflictBody)),
+          .mockRejectedValue(
+            new RestClientError('conflito', 400, conflictBody),
+          ),
       } as unknown as Partial<PmovelClient>,
     });
 
@@ -461,10 +465,14 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
   describe('parseEmailCpfConflict', () => {
     it('extrai e-mail e CPF, inclusive CPF com espaços', () => {
       const body = JSON.stringify({
-        message: ['Employee with email a@b.com or CPF 000 000 000 already exists.'],
+        message: [
+          'Employee with email a@b.com or CPF 000 000 000 already exists.',
+        ],
       });
       expect(
-        EmployeeSyncJob.parseEmailCpfConflict(new RestClientError('', 400, body)),
+        EmployeeSyncJob.parseEmailCpfConflict(
+          new RestClientError('', 400, body),
+        ),
       ).toEqual({ email: 'a@b.com', cpf: '000 000 000' });
     });
 
@@ -485,7 +493,9 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
         message: ['Employee with external_id 21411 already exists.'],
       });
       expect(
-        EmployeeSyncJob.parseEmailCpfConflict(new RestClientError('', 400, body)),
+        EmployeeSyncJob.parseEmailCpfConflict(
+          new RestClientError('', 400, body),
+        ),
       ).toBeNull();
     });
 
@@ -505,7 +515,9 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
 
 describe('EmployeeSyncJob.isAlreadyExists', () => {
   it('reconhece 409', () => {
-    expect(EmployeeSyncJob.isAlreadyExists(new RestClientError('', 409, ''))).toBe(true);
+    expect(
+      EmployeeSyncJob.isAlreadyExists(new RestClientError('', 409, '')),
+    ).toBe(true);
   });
 
   it('reconhece external_id duplicado (mensagem real da API do Pmovel)', () => {
@@ -513,7 +525,9 @@ describe('EmployeeSyncJob.isAlreadyExists', () => {
       message: ['Employee with external_id 21411 already exists.'],
       error: 'Bad Request',
     });
-    expect(EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, body))).toBe(true);
+    expect(
+      EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, body)),
+    ).toBe(true);
   });
 
   it('NÃO trata e-mail/CPF de outra pessoa como external_id duplicado', () => {
@@ -521,12 +535,16 @@ describe('EmployeeSyncJob.isAlreadyExists', () => {
       message: ['Employee with email a@b.com or CPF 123 already exists.'],
       error: 'Bad Request',
     });
-    expect(EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, body))).toBe(false);
+    expect(
+      EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, body)),
+    ).toBe(false);
   });
 
   it('não reconhece 400 genérico', () => {
     expect(
-      EmployeeSyncJob.isAlreadyExists(new RestClientError('', 400, 'invalid email')),
+      EmployeeSyncJob.isAlreadyExists(
+        new RestClientError('', 400, 'invalid email'),
+      ),
     ).toBe(false);
   });
 });

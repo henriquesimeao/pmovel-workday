@@ -185,9 +185,9 @@ describe('EmployeeMapper', () => {
         ...configWithCpf,
         invalidDocuments: ['000000000', '99999999999'],
       });
-      await expect(m.toCreateDto(comDoc('999 999 999 99'))).rejects.toBeInstanceOf(
-        MappingError,
-      );
+      await expect(
+        m.toCreateDto(comDoc('999 999 999 99')),
+      ).rejects.toBeInstanceOf(MappingError);
     });
 
     it('atualização não envia campos vazios (não apaga dado no Pmovel)', async () => {
