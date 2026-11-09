@@ -2,7 +2,8 @@
 
 Aplicação integradora em **NestJS + TypeScript** que sincroniza dados entre
 **Workday** e **Pmovel** via REST API, em fases. Este documento descreve a
-arquitetura-alvo e é atualizado conforme as tasks avançam.
+arquitetura implementada. Para o estado atual do projeto, o que falta e como
+retomar, veja [continuidade.md](continuidade.md).
 
 ## Visão geral
 
@@ -26,8 +27,8 @@ SyncOrchestrator ─► MySQL/TypeORM: sync_run, sync_item, cnpj_mapping, sync_c
 | **3** | Configurável | Férias | `/v3/vacations` |
 | **4** | Configurável | Afastamentos | `/v3/absences` |
 
-A Fase 1 é o escopo detalhado atual; as demais estão no roadmap
-(ver `docs/roadmap-fases.md`, criado na Task 10).
+A Fase 1 está implementada e validada em dev; as demais estão no roadmap
+(ver `docs/roadmap-fases.md`).
 
 ## Estrutura de pastas
 
@@ -41,15 +42,19 @@ src/
   pmovel/                 PmovelClient, DTOs
   persistence/            entidades + migrations (sync_run, sync_item, cnpj_mapping, sync_cursor)
   mapping/                FieldMappingService, CnpjMappingService, EmployeeMapper, mapping.config
-  sync/                   SyncOrchestrator, SyncController, scheduler, PhaseSyncJob
+  sync/                   SyncOrchestrator, SyncController, scheduler, PhaseSyncJob,
+                          JobRegistry, ManualReviewError
   phases/employees/       EmployeeSyncJob
   health/                 HealthController
 docs/
+  continuidade.md             estado atual, como retomar, pendências (comece aqui)
   arquitetura.md              (este arquivo)
+  fase-1-colaboradores.md     fluxo da Fase 1 e validações reais
+  de-para-workday-pmovel.md   mapeamento de campos e regras de cpf/e-mail
+  banco-de-dados.md           tabelas, migrations e operação do MySQL
+  workday-novo-cliente.md     setup do tenant Workday (inclui WQL)
   referencia-workday-rest.md  código JS de referência
-  workday-novo-cliente.md     setup do tenant Workday
-  de-para-workday-pmovel.md   mapeamento de campos (Task 4)
-  roadmap-fases.md            Fases 2-4 (Task 10)
+  roadmap-fases.md            Fases 2-4
 src/*.js                  código de referência (preservado, não é o alvo final)
 ```
 
@@ -118,11 +123,22 @@ Pmovel, com configuração que cobre os três casos do de/para:
   CNPJ (lookup) e **valida os obrigatórios**, lançando `MappingError` com a lista
   de campos ausentes (o job transforma em falha de item, sem abortar o lote).
 
-A config inicial (`DEFAULT_EMPLOYEE_MAPPING`) reflete o de/para da Task 4:
-campos confirmados como `direct`, gaps obrigatórios (`employeegroup_code`,
-`syndicate_code`, `workday_code`) como `default` placeholder, e `cnpj` como
+A config (`DEFAULT_EMPLOYEE_MAPPING`) define: campos confirmados como `direct`;
+grupo, sindicato e jornada (`_code` e `_name`) como `default` `DEFAULT`; `cnpj` como
 `lookup`. Externalizar para arquivo/env é um próximo passo quando a operação
 precisar ajustar sem recompilar.
+
+Regras que o `EmployeeMapper` aplica além do mapeamento simples (detalhe em
+`de-para-workday-pmovel.md`):
+
+- **`immutableOnUpdate`**: grupo, sindicato e jornada (code e name) só vão na
+  admissão e nunca no `PUT`.
+- **`cpf`**: CPF brasileiro (só dígitos) ou, na falta, o documento principal; sem
+  espaços. **`invalidDocuments`** (`000000000`) recusa a pessoa, na criação e na
+  atualização.
+- **E-mail**: o do Workday; sem ele, `<documento>@<empresa>.com`. O gerado não vai
+  no `PUT`.
+- **`PUT` sem campos vazios**: não envia string vazia, que apagaria o dado no Pmovel.
 
 ## Sincronização (`sync/`)
 
@@ -138,6 +154,10 @@ precisar ajustar sem recompilar.
   `GET /sync/runs/:id` (resultado), `GET /sync/jobs` (lista).
 - **`SyncScheduler`** — cria um CronJob em runtime (cron de `SYNC_CRON`) quando
   `SYNC_SCHEDULE_ENABLED=true`, disparando todos os jobs registrados.
+- **`ManualReviewError`** — erro de um item que exige uma pessoa (hoje: e-mail ou
+  CPF já usado por outro cadastro no Pmovel). O orquestrador grava o item como falha
+  com a marcação `TRATAMENTO MANUAL` e, ao fim da execução, lista juntos esses itens
+  no log com os valores em destaque.
 
 ## Decisões de projeto
 
@@ -150,8 +170,12 @@ precisar ajustar sem recompilar.
   diretos, sem necessidade de uma tabela de mapeamento de IDs para correlação.
 - **Política de falhas: continua o lote.** Uma falha em um item é registrada em
   `sync_item` e o processamento segue; o lote não é abortado.
-- **Idempotência.** Admissão faz upsert (POST → PUT se já existe); reprocessar um
-  lote não duplica registros.
+- **Idempotência.** Admissão faz upsert (POST → PUT se o `external_id` já existe);
+  reprocessar um lote não duplica registros (comprovado: a 2ª execução só atualizou).
+  Só o conflito de `external_id` vira `PUT`; conflito de e-mail/CPF vira tratamento
+  manual.
+- **Demissão só de quem existe.** O job consulta o Pmovel antes: ignora quem nunca
+  foi admitido ou já está inativo, e inativa apenas quem está ativo.
 - **Configuração tipada e fail-fast.** O ambiente é validado no boot (Joi); a app
   recusa subir com `.env` incompleto. Nenhum `process.env` fora de `config/`.
 
@@ -159,6 +183,7 @@ precisar ajustar sem recompilar.
 
 Todas as variáveis estão documentadas em `.env.example`. Grupos:
 
+- **Aplicação**: `NODE_ENV`, `PORT` (use `3001` em dev: a 3000 é da API do Pmovel).
 - **Workday**: `WorkdayTenant`, `WorkdayTenantUrl`, `WorkdayServicesUrl` (opcional),
   `WorkdayClientId`, `WorkdayClientSecret`, `WorkdayRefreshToken`.
 - **Pmovel**: `PmovelBaseUrl`, `PmovelAccessKeyId`, `PmovelSecretAccessKey`.
@@ -182,10 +207,23 @@ camada `config/` e nunca logadas.
 | 1 | Scaffold NestJS + configuração tipada | ✅ concluída |
 | 2 | BaseRestClient (token-cache, retry, paginação) | ✅ concluída |
 | 3 | WorkdayClient | ✅ concluída |
-| 4 | Descoberta do schema + de/para | ✅ concluída (ver decisões pendentes no de/para) |
+| 4 | Descoberta do schema + de/para | ✅ concluída (gaps resolvidos via WQL) |
 | 5 | PmovelClient | ✅ concluída |
 | 6 | Persistência MySQL (TypeORM) | ✅ concluída (migration validada em MySQL real — ver docs/banco-de-dados.md) |
 | 7 | Camada de mapeamento | ✅ concluída |
 | 8 | SyncOrchestrator + gatilhos | ✅ concluída |
 | 9 | EmployeeSyncJob (Fase 1) | ✅ concluída (ver docs/fase-1-colaboradores.md) |
 | 10 | Documentação + roadmap | ✅ concluída (ver docs/roadmap-fases.md) |
+
+### Depois do plano de 10 tarefas
+
+| Item | Situação |
+|---|---|
+| Leitura via WQL (datas, status, empresa, documento) | ✅ |
+| Migration validada em MySQL real (0 divergências com as entidades) | ✅ |
+| Escrita validada na API local do Pmovel (criar, atualizar, demitir, reativar) | ✅ |
+| Lote completo e repetição (idempotência) | ✅ 75 atualizados, 0 duplicados |
+| Regras de `cpf`, e-mail gerado, campos imutáveis, `PUT` sem vazios | ✅ |
+| Tratamento manual de conflito de e-mail/CPF | ✅ |
+| Readmissão (reativar), run presa em `RUNNING`, `POST` assíncrono, diff incremental | ⏳ pendentes, ver [continuidade.md](continuidade.md) |
+| Fases 2, 3 e 4 | ⏳ roadmap |

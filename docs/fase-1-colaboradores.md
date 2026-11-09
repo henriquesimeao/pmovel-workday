@@ -6,20 +6,21 @@ admissões, atualizações e demissões, num único job (`employees:full`).
 ## Fluxo
 
 ```
-Workday (listWorkers + getConsolidatedWorker)
+Workday (uma query WQL: listConsolidatedWorkersViaWql)
       │
       ▼
 EmployeeSyncJob.processItem(worker)
       │
       ├─ worker inativo/terminado ──► Pmovel.inactivate(external_id, dt_demissao)   [DEMISSÃO]
       │
-      ├─ não existe no Pmovel ──────► Pmovel.create (upsert: 409 → update)          [ADMISSÃO]
+      ├─ não existe no Pmovel ──────► Pmovel.create (external_id duplicado → update) [ADMISSÃO]
       │
-      └─ existe e ativo ────────────► Pmovel.update(external_id, dto)               [ATUALIZAÇÃO]
+      └─ existe ────────────────────► Pmovel.update(external_id, dto)               [ATUALIZAÇÃO]
+                                      (readmissão ainda não reativa: ver continuidade.md)
 ```
 
 - **Chave de correlação:** `external_id` (derivado do worker pela config de
-  mapeamento; default = `workerId`).
+  mapeamento; hoje = `employeeID`).
 - **Idempotência:** admissão faz upsert; reprocessar não duplica. Atualização e
   demissão checam o estado atual no Pmovel antes de agir.
 - **Política de falhas:** cada item é processado isoladamente; falhas (ex.: CNPJ
@@ -31,10 +32,10 @@ EmployeeSyncJob.processItem(worker)
 Sob demanda (HTTP):
 
 ```bash
-curl -X POST http://localhost:3000/sync/employees/full
+curl -X POST http://127.0.0.1:3001/sync/employees/full
 # { "runId": 1, "phase": "employees", "type": "full" }
 
-curl http://localhost:3000/sync/runs/1
+curl http://127.0.0.1:3001/sync/runs/1
 # run com status, contadores e itens (sucesso/falha por external_id)
 ```
 
@@ -58,8 +59,8 @@ Validado no tenant de dev: 112 workers (82 ativos + 30 terminados), `hireDate` e
 - `employeegroup_code`/`syndicate_code`/`workday_code` usam o default em
   `mapping.config` **apenas na admissão**; na **atualização não são enviados**
   (`immutableOnUpdate`), para não sobrescrever ajustes feitos manualmente no Pmovel;
-- `cpf` vem de `nationalIdentifiers`; ausente em parte do tenant de demo (EUA), mas
-  presente em tenant BR.
+- `cpf` vem de `nationalIdentifiers` (ver regras em `de-para-workday-pmovel.md`);
+  no tenant de demo só há documentos estrangeiros.
 
 ### Campos imutáveis na atualização
 
@@ -71,10 +72,12 @@ remove esses campos do corpo do update.
 
 ## Testes
 
-- Unitários: consolidação do worker, classificação (create/update/inactivate/skip),
-  upsert com fallback (`employee-sync.job.spec.ts`).
-- E2e: fluxo admissão → atualização → demissão, idempotência e falha de item
-  isolada (`test/employees-phase1.e2e-spec.ts`), com Workday e Pmovel mockados.
+- Unitários (127 no total): consolidação do worker, classificação
+  (create/update/inactivate/skip), upsert com fallback, tratamento manual
+  (`employee-sync.job.spec.ts`), regras de `cpf`/e-mail/campos imutáveis
+  (`employee.mapper.spec.ts`) e resumo no orquestrador (`sync.orchestrator.spec.ts`).
+- E2e (8): admissão → atualização → demissão, idempotência e falha de item isolada
+  (`test/employees-phase1.e2e-spec.ts`), com Workday e Pmovel mockados.
 
 ## Validação na API local do Pmovel (dev)
 
@@ -91,7 +94,7 @@ Pmovel (cliente `workday`, 4 empresas).
 | Falhas | 7 | ver abaixo |
 
 **2ª execução (idempotência):** 75 atualizações, 0 criações duplicadas, mesmas 7
-falhas e 30 ignorados.
+falhas e 30 ignorados. As execuções 3 e 4 repetiram esse resultado (75/7/30).
 
 **Falhas esperadas** (registradas em `sync_item`, o lote continua):
 - 4 sem documento no Workday (3 também sem e-mail): `cpf` ausente.
@@ -157,7 +160,7 @@ O `PUT` da atualização:
 - **não envia campos vazios**: uma string vazia apagaria o dado no Pmovel;
 - **recusa quem tem documento inválido** (`000000000`), como na criação.
 
-### Execução de 05/11 (dev)
+### Execução com `cpf` sem espaços (run 3, dev)
 
 Com o `cpf` sem espaços e a recusa de `000000000`: 75 atualizações (corrigindo o
 `cpf` dos 75 cadastros que tinham espaços; conferido na API: 0 com espaço, 0 com
@@ -235,3 +238,8 @@ quando o conflito for resolvido no Pmovel.
 Não entram nessa marcação: `external_id` duplicado (o integrador atualiza), documento
 recusado (`000000000`) e campos obrigatórios ausentes. Esses são falhas comuns.
 
+## Pendências conhecidas da Fase 1
+
+Readmissão que não reativa, run presa em `RUNNING`, `POST` síncrono, ausência de
+diff incremental, `country` fixo em `BR` e outros itens estão detalhados, com
+prioridade e sugestão de correção, em [continuidade.md](continuidade.md#7-pendências-e-riscos-por-prioridade).

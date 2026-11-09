@@ -48,3 +48,21 @@ A migration inicial (`InitialSchema`) cria as quatro tabelas no dialeto MySQL.
 - `sync_item.payloadSummary` guarda um **resumo** do que foi enviado/decidido, não
   o payload completo — evita acumular PII em texto livre.
 - Mensagens de erro são truncadas (ex.: `errorMessage` da run em 2000 chars).
+
+## Operação
+
+**Estado em dev:** database `integration_workday` em `127.0.0.1`, migration
+`InitialSchema` aplicada, 4 registros em `cnpj_mapping`, runs 1 a 4 em `sync_run`.
+Os dados de `cnpj_mapping` **não estão no git**: em outro ambiente, insira os pares
+(`legalEntityId`, `legalEntityName`, `cnpj` só com números, `active = 1`).
+
+**Run presa em `running`** (a aplicação caiu no meio de uma execução) bloqueia as
+próximas com 409. Para liberar:
+
+```sql
+UPDATE sync_run SET status = 'failed', finishedAt = NOW(), errorMessage = 'interrompida'
+WHERE status = 'running';
+```
+
+Consultas de acompanhamento (últimas execuções, falhas, tratamento manual) estão em
+[continuidade.md](continuidade.md#11-consultas-úteis-mysql-do-integrador).

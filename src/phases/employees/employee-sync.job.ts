@@ -15,17 +15,27 @@ import { ManualReviewError } from '../../sync/manual-review.error';
 /**
  * Fase 1 — sincronização de colaboradores (Workday → Pmovel).
  *
- * `fetchItems`: lista os workers do Workday e consolida cada um. (O filtro por
- * diff real desde o cursor depende de WQL/SOAP com data de última alteração —
- * ver gap no de/para; por ora processa o conjunto, com idempotência no destino.)
+ * `fetchItems`: uma única query WQL (`allActiveAndTerminatedWorkers`) traz todos
+ * os workers, ativos e demitidos, já consolidados. O parâmetro `since` (cursor)
+ * ainda NÃO é usado: toda execução varre o conjunto inteiro e a idempotência vem
+ * do destino. Diff por data de alteração é uma pendência (docs/continuidade.md).
  *
  * `processItem`: classifica e aplica:
- * - **demissão**: worker inativo/terminado → `inactivate` no Pmovel (se existir).
- * - **admissão**: worker novo → `POST` (upsert: se já existe, cai para `PUT`).
- * - **atualização**: worker já existente e ativo → `PUT`.
+ * - **demissão**: worker inativo/demitido → consulta o Pmovel; só `inactivate` se
+ *   ele existir e ainda estiver ativo. Inexistente ou já inativo é ignorado.
+ * - **admissão**: worker novo → `POST`. Se a API disser que o `external_id` já
+ *   existe, cai para `PUT`.
+ * - **atualização**: worker já existente → `PUT`.
+ *
+ * Conflito de e-mail/CPF com outra pessoa NÃO vira PUT: é convertido em
+ * `ManualReviewError` (tratamento manual), com os valores em destaque.
+ *
+ * Pendência conhecida: worker que volta a ficar ativo no Workday mas está
+ * inativo no Pmovel (readmissão) recebe só um `PUT` e continua inativo. Não há
+ * chamada a `reactivate` (docs/continuidade.md).
  *
  * A chave de correlação é o `external_id` (derivado do worker pela config de
- * mapeamento). Idempotência garantida pelo upsert + checagem de existência.
+ * mapeamento).
  */
 @Injectable()
 export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {

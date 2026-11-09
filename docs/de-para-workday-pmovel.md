@@ -111,10 +111,10 @@ no Pmovel de desenvolvimento (cliente `workday`):
 | Next Level Enterprises, PLC (UK) | `9dff7a68…` (sem `company_ID`, usa o id interno) | `00111111000300` | 28 | 28 |
 | Advanced Solutions, Inc. (USA) | `ASI` | `00111111000400` | 3 | 3 |
 
-Ensaio com o resolvedor lendo do MySQL (sem gravar no Pmovel): dos 82 ativos,
-71 ficam prontos para criar/atualizar, distribuídos pelos 4 CNPJs, e 11 falham por
-e-mail (10) ou CPF (4) ausente. Nenhum falha por CNPJ. Os 30 demitidos seguem
-para `inactivate`.
+Resultado real no tenant de dev (execução 4 contra a API do Pmovel): nenhuma falha
+por CNPJ. Dos 82 ativos, 75 foram criados/atualizados. Os 30 demitidos nunca
+existiram no Pmovel e foram ignorados (se existissem e estivessem ativos, seriam
+inativados). Ver `fase-1-colaboradores.md` para as 7 falhas e suas causas.
 
 > O de/para fica na tabela `cnpj_mapping` do banco, não no git. Em outro ambiente
 > (homologação, produção), insira os pares com os CNPJs daquele ambiente.
@@ -181,9 +181,12 @@ não recebe e-mail gerado.
 ## Decisões de negócio ainda abertas
 
 Apenas os campos **sem equivalente no Workday** (todos obrigatórios no Pmovel),
-hoje com `default: 'DEFAULT'` em `src/mapping/mapping.config.ts`:
+hoje com `default: 'DEFAULT'` (code e name) em `src/mapping/mapping.config.ts`:
 
-- `employeegroup_code`, `syndicate_code`, `workday_code`.
+- `employeegroup_*`, `syndicate_*`, `workday_*`.
+
+Decisão do usuário até aqui: **manter `DEFAULT`**. Para produção, confirmar se haverá
+de/para por alguma dimensão do Workday.
 
 **Regra aplicada:** esses três campos são definidos **apenas na admissão** (com
 `default: 'DEFAULT'`) e **nunca enviados na atualização** — podem ter sido
@@ -194,5 +197,5 @@ Se quiser trocar o valor fixo ou derivar de uma dimensão do Workday (localizaç
 workerType, organização), é só ajustar a config — a camada de mapeamento suporta
 os três modos (direct/lookup/default) sem mexer em código.
 
-Opcional: popular a tabela `cnpj_mapping` com as legal entities reais (`company_ID`)
-→ CNPJ de cada empresa.
+A tabela `cnpj_mapping` do ambiente de dev já está populada com as 4 empresas. Em
+homologação e produção ela precisa ser populada com os CNPJs reais de cada cliente.
