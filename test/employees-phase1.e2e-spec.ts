@@ -164,6 +164,10 @@ describe('Fase 1 — EmployeeSyncJob (e2e)', () => {
     expect(run.body.failureCount).toBe(0);
     expect(fakePmovel.createEmployee).toHaveBeenCalledTimes(2);
     expect(fakePmovel.store.get('1001').cnpj).toBe('00000000000191');
+    const criado = fakePmovel.store.get('1001');
+    expect(criado.employeegroup_name).toBeTruthy();
+    expect(criado.syndicate_name).toBeTruthy();
+    expect(criado.workday_name).toBeTruthy();
   });
 
   it('2ª sync: mesmos workers com dado alterado → ATUALIZADOS (update, idempotente)', async () => {
@@ -187,6 +191,9 @@ describe('Fase 1 — EmployeeSyncJob (e2e)', () => {
     expect(lastUpdate).not.toHaveProperty('employeegroup_code');
     expect(lastUpdate).not.toHaveProperty('syndicate_code');
     expect(lastUpdate).not.toHaveProperty('workday_code');
+    expect(lastUpdate).not.toHaveProperty('employeegroup_name');
+    expect(lastUpdate).not.toHaveProperty('syndicate_name');
+    expect(lastUpdate).not.toHaveProperty('workday_name');
   });
 
   it('3ª sync: um worker terminado → DEMITIDO (inactivate)', async () => {
