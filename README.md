@@ -26,9 +26,11 @@ Arquitetura e decisões de projeto: [docs/arquitetura.md](docs/arquitetura.md).
 npm install
 cp .env.example .env     # preencha: Workday, Pmovel e MySQL
 npm run migration:run    # cria as tabelas no MySQL
-npm run build
-node --env-file=.env dist/main.js     # ou: npm run start:dev
+npm run start:dev        # compila, sobe e recarrega ao salvar; lê o .env
 ```
+
+Sem recarga automática: `npm run start`. Em produção, `npm run build` e
+`npm run start:prod` (lê as variáveis do ambiente do processo, não do `.env`).
 
 Valide com o health check (a aplicação usa a porta **3001**, porque a 3000 é da
 API do Pmovel em dev):

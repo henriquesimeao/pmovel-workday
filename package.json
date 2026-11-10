@@ -9,8 +9,8 @@
   },
   "scripts": {
     "build": "nest build",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
+    "start": "nest start --exec \"node --env-file=.env\"",
+    "start:dev": "nest start --watch --exec \"node --env-file=.env\"",
     "start:prod": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",

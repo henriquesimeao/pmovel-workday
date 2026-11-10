@@ -42,8 +42,7 @@ de negócio, listados na seção 5.
 npm install
 cp .env.example .env          # preencha (variáveis abaixo)
 npm run migration:run         # cria as 4 tabelas no MySQL
-npm run build
-node --env-file=.env dist/main.js     # ou: npm run start:dev
+npm run start:dev             # compila, sobe e lê o .env (porta 3001)
 curl http://127.0.0.1:3001/health     # {"status":"ok",...}
 curl -X POST http://127.0.0.1:3001/sync/employees/full   # dispara a Fase 1
 curl http://127.0.0.1:3001/sync/runs/<runId>             # resultado detalhado
@@ -69,6 +68,8 @@ obrigatória ausente.
 ### Comandos
 | Comando | Uso |
 |---|---|
+| `npm run start:dev` / `npm run start` | sobe a aplicação lendo o `.env` (com / sem recarga) |
+| `npm run start:prod` | roda o build; **não** lê o `.env` (usa o ambiente do processo) |
 | `npm test` / `npm run test:e2e` | testes unitários / ponta a ponta |
 | `npm run lint` | ESLint (roda `--fix`) |
 | `npm run migration:run` / `migration:revert` | aplica / desfaz migrations |
