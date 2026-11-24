@@ -123,8 +123,8 @@ describe('EmployeeMapper', () => {
     });
 
     it('remove todos os espaços', async () => {
-      expect((await mapper().toCreateDto(comDoc('AB 12 34 56 C'))).cpf).toBe(
-        'AB123456C',
+      expect((await mapper().toCreateDto(comDoc('AB 98 76 54 C'))).cpf).toBe(
+        'AB987654C',
       );
       expect((await mapper().toCreateDto(comDoc('123 456 789'))).cpf).toBe(
         '123456789',
@@ -141,8 +141,8 @@ describe('EmployeeMapper', () => {
     });
 
     it('a atualização também envia o documento sem espaços', async () => {
-      const update = await mapper().toUpdateDto(comDoc('AB 12 34 56 C'));
-      expect(update.cpf).toBe('AB123456C');
+      const update = await mapper().toUpdateDto(comDoc('AB 98 76 54 C'));
+      expect(update.cpf).toBe('AB987654C');
     });
 
     it.each(['000000000', '000 000 000', '000-00-0000', ' 000.000.000 '])(
@@ -153,9 +153,71 @@ describe('EmployeeMapper', () => {
           .catch((e) => e)) as MappingError;
         expect(err).toBeInstanceOf(MappingError);
         expect(err.missingFields).toContain('cpf');
-        expect(err.message).toContain('documento inválido');
+        expect(err.message).toContain('documento não aceito');
       },
     );
+
+    it.each([
+      ['123456', '123456'],
+      ['123 456', '123456'],
+      ['AB 12 34 56 C', '123456'],
+      ['AB123456C', '123456'],
+      ['XX-000000000-Y', '000000000'],
+    ])(
+      'rejeita "%s", que corresponde ao valor recusado %s (compara também só os dígitos)',
+      async (doc, blocked) => {
+        const err = (await mapper()
+          .toCreateDto(comDoc(doc))
+          .catch((e) => e)) as MappingError;
+        expect(err).toBeInstanceOf(MappingError);
+        expect(err.missingFields).toContain('cpf');
+        expect(err.message).toContain('documento não aceito');
+        expect(err.message).toContain(
+          `corresponde ao valor recusado ${blocked}`,
+        );
+      },
+    );
+
+    it('aceita documentos que só contêm os dígitos recusados no meio', async () => {
+      expect((await mapper().toCreateDto(comDoc('1234567'))).cpf).toBe(
+        '1234567',
+      );
+      expect((await mapper().toCreateDto(comDoc('AB1234567C'))).cpf).toBe(
+        'AB1234567C',
+      );
+    });
+
+    it('país vem do ISO alpha-2 do worker; sem ele, a admissão falha com o motivo', async () => {
+      expect(
+        (
+          await mapper().toCreateDto({
+            ...consolidatedWorkerFixture,
+            countryAlpha2: 'GB',
+          })
+        ).country,
+      ).toBe('GB');
+
+      const err = (await mapper()
+        .toCreateDto({
+          ...consolidatedWorkerFixture,
+          countryAlpha2: undefined,
+          countryName: 'United Kingdom',
+        })
+        .catch((e) => e)) as MappingError;
+      expect(err).toBeInstanceOf(MappingError);
+      expect(err.missingFields).toEqual(['country']);
+      expect(err.message).toContain(
+        'país "United Kingdom" sem código ISO resolvido no Workday',
+      );
+    });
+
+    it('sem país, a atualização não envia country (não apaga o do Pmovel)', async () => {
+      const update = await mapper().toUpdateDto({
+        ...consolidatedWorkerFixture,
+        countryAlpha2: undefined,
+      });
+      expect(update).not.toHaveProperty('country');
+    });
 
     it('rejeita também na atualização', async () => {
       await expect(
@@ -168,7 +230,7 @@ describe('EmployeeMapper', () => {
         .toCreateDto({ ...comDoc('000000000'), email: 'a@b.com' })
         .catch((e) => e)) as MappingError;
       expect(err).toBeInstanceOf(MappingError);
-      expect(err.message).toContain('documento inválido');
+      expect(err.message).toContain('documento não aceito');
     });
 
     it('não aceita documentos parecidos que não são o recusado', async () => {
@@ -220,10 +282,10 @@ describe('EmployeeMapper', () => {
       const dto = await mapper().toCreateDto({
         ...consolidatedWorkerFixture,
         email: undefined,
-        cpf: 'AB 12 34 56 C',
+        cpf: 'AB 98 76 54 C',
         legalEntityName: 'Operações Brasil, S.A. (São Paulo)',
       });
-      expect(dto.email).toBe('ab123456c@operacoesbrasilsasaopaulo.com');
+      expect(dto.email).toBe('ab987654c@operacoesbrasilsasaopaulo.com');
     });
 
     it('usa legalEntity quando não há nome legível da empresa', async () => {

@@ -60,7 +60,9 @@ export interface EmployeeMappingConfig {
    * Documentos que não são aceitos no campo `cpf` (valores de preenchimento, que
    * já existem no Pmovel e causam conflito). A comparação ignora espaços,
    * pontuação e caixa: `000 000 000` e `000-00-0000` equivalem a `000000000`.
-   * Quem tem um desses documentos não é integrado.
+   * Como o Pmovel também compara só os dígitos de um documento com letras, a
+   * versão só com dígitos também conta: `AB123456C` equivale a `123456`.
+   * Quem tem um desses documentos não é integrado (falha "documento não aceito").
    */
   invalidDocuments: string[];
 }
@@ -112,10 +114,10 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
     employeegroup_name: { mode: 'default', value: 'DEFAULT' },
     syndicate_name: { mode: 'default', value: 'DEFAULT' },
     workday_name: { mode: 'default', value: 'DEFAULT' },
-    // country não vem na query WQL atual; default BR (tenant brasileiro).
-    country: { mode: 'default', value: 'BR' },
+    // País do local de trabalho (WQL locationAddress_Country), em ISO alpha-2.
+    country: { mode: 'direct', source: 'countryAlpha2' },
     is_manager: { mode: 'direct', source: 'isManager' },
-    // jobCode é um código (ex.: "Analista_Sistemas"); mantido como cargo.
+    // Título do cargo (WQL jobTitle); o código (jobCode) só quando não há título.
     job_position: { mode: 'direct', source: 'jobTitle' },
     dt_nascimento: { mode: 'direct', source: 'dateOfBirth' },
     dt_admissao: { mode: 'direct', source: 'hireDate' },
@@ -130,5 +132,5 @@ export const DEFAULT_EMPLOYEE_MAPPING: EmployeeMappingConfig = {
     'workday_code',
     'workday_name',
   ],
-  invalidDocuments: ['000000000'],
+  invalidDocuments: ['000000000', '123456'],
 };

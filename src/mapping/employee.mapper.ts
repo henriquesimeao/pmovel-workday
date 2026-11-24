@@ -209,24 +209,40 @@ export class EmployeeMapper {
 
   /**
    * Documento que vai no campo `cpf`: sem espaços, e vazio quando é um dos
-   * `invalidDocuments`. `blocked` indica que havia um documento, mas ele foi
-   * recusado.
+   * `invalidDocuments`. `blockedBy` é o valor recusado que o documento
+   * corresponde (`undefined` quando o documento é aceito).
    */
   private documentOf(worker: ConsolidatedWorker): {
     value: string;
-    blocked: boolean;
+    blockedBy?: string;
   } {
     const raw = this.stringOrEmpty(
       this.fields.resolve(worker, this.config.fields.cpf),
     );
     const value = raw.replace(/\s+/g, '');
-    const key = EmployeeMapper.docKey(value);
-    const blocked =
-      !!key &&
-      (this.config.invalidDocuments ?? []).some(
-        (d) => EmployeeMapper.docKey(d) === key,
-      );
-    return { value: blocked ? '' : value, blocked };
+    const blockedBy = EmployeeMapper.matchInvalidDocument(
+      value,
+      this.config.invalidDocuments ?? [],
+    );
+    return { value: blockedBy ? '' : value, blockedBy };
+  }
+
+  /**
+   * Valor recusado que o documento corresponde, ou `undefined`. Compara o
+   * documento só com letras e números e, como o Pmovel, também só com os
+   * dígitos (`AB123456C` → `123456`).
+   */
+  static matchInvalidDocument(
+    document: string,
+    invalidDocuments: string[],
+  ): string | undefined {
+    const key = EmployeeMapper.docKey(document);
+    if (!key) return undefined;
+    const digits = document.replace(/\D/g, '');
+    return invalidDocuments.find((d) => {
+      const invalid = EmployeeMapper.docKey(d);
+      return invalid === key || (!!digits && invalid === digits);
+    });
   }
 
   /** Lança MappingError quando o documento do worker é um valor recusado. */
@@ -234,9 +250,13 @@ export class EmployeeMapper {
     worker: ConsolidatedWorker,
     externalId: string,
   ): void {
-    if (this.documentOf(worker).blocked) {
+    const { blockedBy } = this.documentOf(worker);
+    if (blockedBy) {
+      const raw = this.stringOrEmpty(
+        this.fields.resolve(worker, this.config.fields.cpf),
+      ).replace(/\s+/g, '');
       throw new MappingError(
-        `Worker ${externalId}: documento inválido, valor de preenchimento não aceito (${(this.config.invalidDocuments ?? []).join(', ')})`,
+        `Worker ${externalId}: documento não aceito: "${raw}" corresponde ao valor recusado ${blockedBy} (recusados: ${(this.config.invalidDocuments ?? []).join(', ')})`,
         externalId,
         ['cpf'],
       );
@@ -315,9 +335,20 @@ export class EmployeeMapper {
       // Quando falta o CNPJ, diz qual empresa precisa ser cadastrada: cada
       // empresa do Workday deve ser um cliente no Pmovel, com de/para em
       // cnpj_mapping.
-      const hint = missing.includes('cnpj')
-        ? ` (empresa "${worker.legalEntity ?? worker.legalEntityId ?? 'desconhecida'}" sem de/para em cnpj_mapping)`
-        : '';
+      const hints: string[] = [];
+      if (missing.includes('cnpj')) {
+        hints.push(
+          `empresa "${worker.legalEntity ?? worker.legalEntityId ?? 'desconhecida'}" sem de/para em cnpj_mapping`,
+        );
+      }
+      if (missing.includes('country')) {
+        hints.push(
+          worker.countryName
+            ? `país "${worker.countryName}" sem código ISO resolvido no Workday`
+            : 'sem país do local de trabalho no Workday',
+        );
+      }
+      const hint = hints.length ? ` (${hints.join('; ')})` : '';
       throw new MappingError(
         `Worker ${externalId}: campos obrigatórios ausentes: ${missing.join(', ')}${hint}`,
         externalId,
