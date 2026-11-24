@@ -150,7 +150,8 @@ Regras que o `EmployeeMapper` aplica além do mapeamento simples (detalhe em
   (registra cada resultado em `sync_item`), atualiza o `sync_cursor` e fecha a
   run. Se a origem falha, a run vira FAILED e o cursor não avança.
 - **`JobRegistry`** — registra/localiza jobs por `phase/type`.
-- **`SyncController`** — `POST /sync/:phase/:type` (dispara, 409 se já rodando),
+- **`SyncController`** — `POST /sync/:phase/:type` (dispara em segundo plano e
+  responde 202 com o `runId`; `?wait=true` espera o fim; 409 se já rodando),
   `GET /sync/runs/:id` (resultado), `GET /sync/jobs` (lista).
 - **`SyncScheduler`** — cria um CronJob em runtime (cron de `SYNC_CRON`) quando
   `SYNC_SCHEDULE_ENABLED=true`, disparando todos os jobs registrados.
@@ -225,5 +226,5 @@ camada `config/` e nunca logadas.
 | Lote completo e repetição (idempotência) | ✅ 75 atualizados, 0 duplicados |
 | Regras de `cpf`, e-mail gerado, campos imutáveis, `PUT` sem vazios | ✅ |
 | Tratamento manual de conflito de e-mail/CPF | ✅ |
-| Readmissão (reativar), run presa em `RUNNING`, `POST` assíncrono, diff incremental | ⏳ pendentes, ver [continuidade.md](continuidade.md) |
+| Diff incremental | ⏳ pendentes, ver [continuidade.md](continuidade.md) |
 | Fases 2, 3 e 4 | ⏳ roadmap |

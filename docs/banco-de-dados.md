@@ -52,7 +52,7 @@ A migration inicial (`InitialSchema`) cria as quatro tabelas no dialeto MySQL.
 ## Operação
 
 **Estado em dev:** database `integration_workday` em `127.0.0.1`, migration
-`InitialSchema` aplicada, 4 registros em `cnpj_mapping`, runs 1 a 4 em `sync_run`.
+`InitialSchema` aplicada, 4 registros em `cnpj_mapping`, runs 1 a 11 em `sync_run`.
 Os dados de `cnpj_mapping` **não estão no git**: em outro ambiente, insira os pares
 (`legalEntityId`, `legalEntityName`, `cnpj` só com números, `active = 1`).
 

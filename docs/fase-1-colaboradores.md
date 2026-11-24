@@ -15,9 +15,25 @@ EmployeeSyncJob.processItem(worker)
       │
       ├─ não existe no Pmovel ──────► Pmovel.create (external_id duplicado → update) [ADMISSÃO]
       │
-      └─ existe ────────────────────► Pmovel.update(external_id, dto)               [ATUALIZAÇÃO]
-                                      (readmissão ainda não reativa: ver continuidade.md)
+      ├─ existe e ativo ────────────► Pmovel.update(external_id, dto)               [ATUALIZAÇÃO]
+      │
+      └─ existe e inativo ──────────► mesma admissão e mesmo CNPJ?                   [READMISSÃO]
+                                        ├─ sim ► Pmovel.reactivate + update
+                                        └─ não ► Pmovel.create com join_history (novo cadastro)
 ```
+
+- **Demitido** é o worker inativo no Workday, ou com `terminationDate` igual ou
+  posterior ao `hireDate`. Uma demissão anterior à admissão atual indica
+  recontratação, e o worker é tratado como ativo.
+- **Readmissão**: a reativação só acontece quando a data de admissão e a empresa
+  são as mesmas no Workday e no Pmovel (demissão desfeita). Qualquer diferença gera
+  um novo cadastro, que o Pmovel liga ao antigo pelo `join_history`. O integrador
+  não distingue uma demissão desfeita no Workday de uma inativação feita à mão no
+  Pmovel: nos dois casos, com mesma admissão e empresa, ele reativa.
+- **Validado na API local** com o 21411: inativado no Pmovel e processado com a
+  mesma admissão → `reactivate` (mesmo cadastro, `dt_demissao` limpa); inativado e
+  processado com admissão nova → novo cadastro (282539) ativo, o antigo (282464)
+  continua inativo, e as execuções seguintes só atualizam o cadastro novo.
 
 - **Chave de correlação:** `external_id` (derivado do worker pela config de
   mapeamento; hoje = `employeeID`).
@@ -33,10 +49,14 @@ Sob demanda (HTTP):
 
 ```bash
 curl -X POST http://127.0.0.1:3001/sync/employees/full
-# { "runId": 1, "phase": "employees", "type": "full" }
+# HTTP 202: { "runId": 1, ..., "status": "running", "statusUrl": "/sync/runs/1" }
+# HTTP 409 se já houver uma execução em andamento
 
 curl http://127.0.0.1:3001/sync/runs/1
-# run com status, contadores e itens (sucesso/falha por external_id)
+# run com status, contadores (sobem a cada item) e itens (sucesso/falha por external_id)
+
+curl -X POST "http://127.0.0.1:3001/sync/employees/full?wait=true"
+# espera o fim: HTTP 200 com { "runId": 2, ..., "status": "completed" }
 ```
 
 Agendado: defina `SYNC_SCHEDULE_ENABLED=true` e `SYNC_CRON` no `.env`.
@@ -191,8 +211,9 @@ Consequências para documentos estrangeiros:
 
 Por isso um NINO como `AB123456C` pode colidir com qualquer colaborador ativo de
 qualquer cliente que tenha `123456` no campo `cpf`, e um SSN pode colidir com um SIN
-de mesmos dígitos. É a explicação do 100011 (`000000000`, já cadastrado) e a hipótese
-para o 21609. Para investigar um caso, procure no banco do Pmovel:
+de mesmos dígitos. É a explicação do 100011 (`000000000`, já cadastrado) e do 21609
+(confirmado: dois colaboradores de teste de outros clientes, `PMOVEL TESTE ROGERIO` e
+`PMOVEL - DEMO LATAM (AB)`, têm `cpf = 123456`). Para investigar um caso, procure no banco do Pmovel:
 
 ```sql
 SELECT * FROM users
@@ -240,6 +261,6 @@ recusado (`000000000`) e campos obrigatórios ausentes. Esses são falhas comuns
 
 ## Pendências conhecidas da Fase 1
 
-Readmissão que não reativa, run presa em `RUNNING`, `POST` síncrono, ausência de
+Ausência de
 diff incremental, `country` fixo em `BR` e outros itens estão detalhados, com
 prioridade e sugestão de correção, em [continuidade.md](continuidade.md#7-pendências-e-riscos-por-prioridade).

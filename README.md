@@ -64,12 +64,15 @@ A Fase 1 (colaboradores, Workday → Pmovel) está disponível. Detalhes em
 Disparo **sob demanda**:
 
 ```bash
-# inicia uma sincronização
+# inicia uma sincronização em segundo plano (responde 202 na hora; 409 se já rodando)
 curl -X POST http://127.0.0.1:3001/sync/employees/full
-# { "runId": 1, "phase": "employees", "type": "full" }
+# { "runId": 1, "phase": "employees", "type": "full", "status": "running", "statusUrl": "/sync/runs/1" }
 
-# consulta o resultado (status, contadores, itens com sucesso/falha)
+# acompanha / consulta o resultado (status, contadores, itens com sucesso/falha)
 curl http://127.0.0.1:3001/sync/runs/1
+
+# ou espera o fim na mesma chamada (responde 200 com o status final)
+curl -X POST "http://127.0.0.1:3001/sync/employees/full?wait=true"
 
 # lista os jobs registrados
 curl http://127.0.0.1:3001/sync/jobs
