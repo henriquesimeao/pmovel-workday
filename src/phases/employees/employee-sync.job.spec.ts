@@ -513,6 +513,201 @@ describe('EmployeeSyncJob: conflito de e-mail/CPF (tratamento manual)', () => {
   });
 });
 
+describe('EmployeeSyncJob: readmissão (ativo no Workday, inativo no Pmovel)', () => {
+  const CNPJ = '00111111000100';
+  const worker: ConsolidatedWorker = {
+    ...baseWorker,
+    hireDate: '2020-01-01',
+    legalEntityId: 'NLE USA',
+  };
+  const inactiveInPmovel = {
+    id: 1,
+    active: false,
+    dt_admissao: '2020-01-01',
+    cnpj: CNPJ,
+  };
+
+  function setup(existing: Record<string, unknown>, workerCnpj = CNPJ) {
+    const pmovel = {
+      getEmployeeByExternalId: jest.fn().mockResolvedValue(existing),
+      reactivateEmployeeByExternalId: jest.fn().mockResolvedValue(undefined),
+      updateEmployeeByExternalId: jest.fn().mockResolvedValue({ id: 1 }),
+      createEmployee: jest.fn().mockResolvedValue({ id: 2 }),
+    };
+    const job = makeJob({
+      pmovel: pmovel as unknown as Partial<PmovelClient>,
+      mapper: {
+        resolveCnpj: jest.fn().mockResolvedValue(workerCnpj),
+        toCreateDto: jest
+          .fn()
+          .mockResolvedValue({ external_id: '1001', cnpj: workerCnpj }),
+      } as unknown as Partial<EmployeeMapper>,
+    });
+    return { job, pmovel };
+  }
+
+  it('mesma admissão e mesma empresa → REACTIVATE (limpa dt_demissao) + PUT', async () => {
+    const { job, pmovel } = setup(inactiveInPmovel);
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: worker,
+    });
+
+    expect(result.operation).toBe(SyncOperation.REACTIVATE);
+    expect(pmovel.reactivateEmployeeByExternalId).toHaveBeenCalledWith('1001', {
+      clean_dt_demissao: true,
+    });
+    expect(pmovel.updateEmployeeByExternalId).toHaveBeenCalled();
+    expect(pmovel.createEmployee).not.toHaveBeenCalled();
+  });
+
+  it('compara data ignorando hora/fuso e CNPJ ignorando máscara', async () => {
+    const { job, pmovel } = setup({
+      ...inactiveInPmovel,
+      dt_admissao: '2020-01-01T03:00:00.000Z',
+      cnpj: '00.111.111/0001-00',
+    });
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: worker,
+    });
+
+    expect(result.operation).toBe(SyncOperation.REACTIVATE);
+    expect(pmovel.createEmployee).not.toHaveBeenCalled();
+  });
+
+  it('admissão diferente → novo cadastro com join_history, sem reativar', async () => {
+    const { job, pmovel } = setup(inactiveInPmovel);
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: { ...worker, hireDate: '2024-03-01' },
+    });
+
+    expect(result.operation).toBe(SyncOperation.CREATE);
+    expect(result.summary).toContain('admissão 2020-01-01 → 2024-03-01');
+    expect(pmovel.createEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({ external_id: '1001', join_history: true }),
+    );
+    expect(pmovel.reactivateEmployeeByExternalId).not.toHaveBeenCalled();
+    expect(pmovel.updateEmployeeByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('mesma admissão, empresa diferente → novo cadastro com join_history', async () => {
+    const { job, pmovel } = setup(inactiveInPmovel, '00111111000200');
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: worker,
+    });
+
+    expect(result.operation).toBe(SyncOperation.CREATE);
+    expect(result.summary).toContain('empresa 00111111000100 → 00111111000200');
+    expect(pmovel.createEmployee).toHaveBeenCalledWith(
+      expect.objectContaining({ join_history: true }),
+    );
+    expect(pmovel.reactivateEmployeeByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('sem data de admissão no Pmovel → não reativa (novo cadastro)', async () => {
+    const { job, pmovel } = setup({ ...inactiveInPmovel, dt_admissao: null });
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: worker,
+    });
+
+    expect(result.operation).toBe(SyncOperation.CREATE);
+    expect(pmovel.reactivateEmployeeByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('conflito de e-mail/CPF no novo cadastro → tratamento manual', async () => {
+    const { job, pmovel } = setup(inactiveInPmovel);
+    pmovel.createEmployee.mockRejectedValue(
+      new RestClientError(
+        'conflito',
+        400,
+        JSON.stringify({
+          message: ['Employee with email a@b.com or CPF 123 already exists.'],
+        }),
+      ),
+    );
+
+    await expect(
+      job.processItem({
+        externalId: '1001',
+        payload: { ...worker, hireDate: '2024-03-01' },
+      }),
+    ).rejects.toBeInstanceOf(ManualReviewError);
+    expect(pmovel.updateEmployeeByExternalId).not.toHaveBeenCalled();
+  });
+
+  it('recontratado no Workday com data de demissão antiga → readmissão, não demissão', async () => {
+    const { job, pmovel } = setup(inactiveInPmovel);
+    const inactivate = jest.fn();
+    (pmovel as Record<string, unknown>).inactivateEmployeeByExternalId =
+      inactivate;
+
+    const result = await job.processItem({
+      externalId: '1001',
+      payload: {
+        ...worker,
+        active: true,
+        hireDate: '2024-03-01',
+        terminationDate: '2023-06-30',
+      },
+    });
+
+    expect(result.operation).toBe(SyncOperation.CREATE);
+    expect(inactivate).not.toHaveBeenCalled();
+  });
+});
+
+describe('EmployeeSyncJob.isTerminated', () => {
+  it('inativo no Workday → demitido', () => {
+    expect(EmployeeSyncJob.isTerminated({ ...baseWorker, active: false })).toBe(
+      true,
+    );
+  });
+
+  it('ativo sem data de demissão → não demitido', () => {
+    expect(EmployeeSyncJob.isTerminated({ ...baseWorker, active: true })).toBe(
+      false,
+    );
+  });
+
+  it('ativo com demissão na data ou depois da admissão (agendada) → demitido', () => {
+    expect(
+      EmployeeSyncJob.isTerminated({
+        ...baseWorker,
+        hireDate: '2020-01-01',
+        terminationDate: '2026-12-31',
+      }),
+    ).toBe(true);
+  });
+
+  it('ativo com demissão anterior à admissão atual (recontratado) → não demitido', () => {
+    expect(
+      EmployeeSyncJob.isTerminated({
+        ...baseWorker,
+        hireDate: '2024-03-01',
+        terminationDate: '2023-06-30',
+      }),
+    ).toBe(false);
+  });
+
+  it('com data de demissão e sem admissão → demitido', () => {
+    expect(
+      EmployeeSyncJob.isTerminated({
+        ...baseWorker,
+        terminationDate: '2023-06-30',
+      }),
+    ).toBe(true);
+  });
+});
+
 describe('EmployeeSyncJob.isAlreadyExists', () => {
   it('reconhece 409', () => {
     expect(

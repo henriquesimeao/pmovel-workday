@@ -281,7 +281,11 @@ export class EmployeeMapper {
       .replace(/[^a-z0-9]/g, '');
   }
 
-  private resolveCnpj(worker: ConsolidatedWorker): Promise<string | null> {
+  /**
+   * CNPJ do cliente do Pmovel para a empresa do worker (de/para em
+   * `cnpj_mapping`). `null` quando a empresa não tem de/para.
+   */
+  resolveCnpj(worker: ConsolidatedWorker): Promise<string | null> {
     if (this.config.fields.cnpj.mode === 'lookup') {
       return this.cnpj.resolveForWorker(worker);
     }

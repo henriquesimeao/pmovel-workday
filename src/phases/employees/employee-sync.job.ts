@@ -7,6 +7,7 @@ import {
 import { SyncOperation } from '../../persistence/entities/sync-item.entity';
 import { WorkdayClient } from '../../workday/workday.client';
 import { PmovelClient } from '../../pmovel/pmovel.client';
+import { EmployeeResponse } from '../../pmovel/pmovel.types';
 import { EmployeeMapper } from '../../mapping/employee.mapper';
 import { ConsolidatedWorker } from '../../workday/consolidated-worker';
 import { RestClientError } from '../../common/http/rest-client.error';
@@ -25,14 +26,15 @@ import { ManualReviewError } from '../../sync/manual-review.error';
  *   ele existir e ainda estiver ativo. Inexistente ou já inativo é ignorado.
  * - **admissão**: worker novo → `POST`. Se a API disser que o `external_id` já
  *   existe, cai para `PUT`.
- * - **atualização**: worker já existente → `PUT`.
+ * - **atualização**: worker já existente e ativo → `PUT`.
+ * - **readmissão**: worker ativo no Workday, mas inativo no Pmovel:
+ *   - mesma data de admissão **e** mesma empresa (CNPJ) → a demissão foi
+ *     desfeita no Workday: `reactivate` (limpa `dt_demissao`) + `PUT`;
+ *   - senão → readmissão com novo cadastro: `POST` com `join_history: true`
+ *     (o Pmovel cria um novo registro e liga o histórico ao antigo).
  *
  * Conflito de e-mail/CPF com outra pessoa NÃO vira PUT: é convertido em
  * `ManualReviewError` (tratamento manual), com os valores em destaque.
- *
- * Pendência conhecida: worker que volta a ficar ativo no Workday mas está
- * inativo no Pmovel (readmissão) recebe só um `PUT` e continua inativo. Não há
- * chamada a `reactivate` (docs/continuidade.md).
  *
  * A chave de correlação é o `external_id` (derivado do worker pela config de
  * mapeamento).
@@ -72,16 +74,101 @@ export class EmployeeSyncJob implements PhaseSyncJob<ConsolidatedWorker> {
     const worker = item.payload;
 
     // 1) Demissão: worker inativo/terminado.
-    if (worker.active === false || worker.terminationDate) {
+    if (EmployeeSyncJob.isTerminated(worker)) {
       return this.applyTermination(item.externalId, worker);
     }
 
-    // 2) Admissão/atualização: existe no Pmovel?
+    // 2) Admissão/atualização/readmissão: existe no Pmovel?
     const existing = await this.pmovel.getEmployeeByExternalId(item.externalId);
-    if (existing) {
-      return this.applyUpdate(item.externalId, worker);
+    if (!existing) {
+      return this.applyUpsertCreate(item.externalId, worker);
     }
-    return this.applyUpsertCreate(item.externalId, worker);
+    if (existing.active === false) {
+      return this.applyReadmission(item.externalId, worker, existing);
+    }
+    return this.applyUpdate(item.externalId, worker);
+  }
+
+  /**
+   * O worker conta como demitido quando está inativo no Workday, ou quando tem
+   * data de demissão que não é anterior à admissão atual. Numa recontratação o
+   * Workday pode manter a data da demissão antiga: se ela é anterior à nova
+   * admissão, a pessoa está ativa (foi readmitida).
+   */
+  static isTerminated(worker: ConsolidatedWorker): boolean {
+    if (worker.active === false) return true;
+    const termination = EmployeeSyncJob.dateKey(worker.terminationDate);
+    if (!termination) return false;
+    const hire = EmployeeSyncJob.dateKey(worker.hireDate);
+    return !hire || termination >= hire;
+  }
+
+  /**
+   * Worker ativo no Workday e inativo no Pmovel.
+   *
+   * Só reativa o cadastro existente quando a data de admissão e a empresa
+   * (CNPJ) são as mesmas: é o caso de demissão desfeita no Workday. Qualquer
+   * diferença indica nova admissão, e o Pmovel recebe um novo cadastro com
+   * `join_history` (liga o histórico ao cadastro antigo).
+   */
+  private async applyReadmission(
+    externalId: string,
+    worker: ConsolidatedWorker,
+    existing: EmployeeResponse,
+  ): Promise<ItemResult> {
+    const workerCnpj = await this.mapper.resolveCnpj(worker);
+    const pmovelHire = EmployeeSyncJob.dateKey(existing.dt_admissao);
+    const workdayHire = EmployeeSyncJob.dateKey(worker.hireDate);
+    const pmovelCnpj = EmployeeSyncJob.cnpjKey(existing.cnpj);
+    const workdayCnpj = EmployeeSyncJob.cnpjKey(workerCnpj);
+
+    const sameHireDate = !!workdayHire && pmovelHire === workdayHire;
+    const sameCompany = !!workdayCnpj && pmovelCnpj === workdayCnpj;
+
+    if (sameHireDate && sameCompany) {
+      await this.pmovel.reactivateEmployeeByExternalId(externalId, {
+        clean_dt_demissao: true,
+      });
+      await this.applyUpdate(externalId, worker);
+      return {
+        operation: SyncOperation.REACTIVATE,
+        summary: 'reativado (mesma admissão e empresa)',
+      };
+    }
+
+    const reasons: string[] = [];
+    if (!sameHireDate) {
+      reasons.push(`admissão ${pmovelHire || '?'} → ${workdayHire || '?'}`);
+    }
+    if (!sameCompany) {
+      reasons.push(`empresa ${pmovelCnpj || '?'} → ${workdayCnpj || '?'}`);
+    }
+
+    const createDto = await this.mapper.toCreateDto(worker);
+    try {
+      await this.pmovel.createEmployee({ ...createDto, join_history: true });
+    } catch (e) {
+      throw this.asManualReview(externalId, e);
+    }
+    return {
+      operation: SyncOperation.CREATE,
+      summary: `readmitido, novo cadastro (${reasons.join('; ')})`,
+    };
+  }
+
+  /** Data como `YYYY-MM-DD` (ignora hora/fuso); vazio quando não há data. */
+  static dateKey(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : '';
+  }
+
+  /** CNPJ só com letras e números, maiúsculo (aceita o CNPJ alfanumérico). */
+  static cnpjKey(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    return String(value)
+      .replace(/[^A-Za-z0-9]/g, '')
+      .toUpperCase();
   }
 
   /** Demissão via inactivate (só se o colaborador existir no Pmovel). */
