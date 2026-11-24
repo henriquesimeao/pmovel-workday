@@ -1,19 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConsolidatedWorker } from '../workday/consolidated-worker';
 import { FieldMappingRule, TransformName } from './mapping.config';
-
-/** Conversão parcial Alpha-3 → Alpha-2 para países comuns (fallback: vazio). */
-const ALPHA3_TO_ALPHA2: Record<string, string> = {
-  BRA: 'BR',
-  USA: 'US',
-  ARG: 'AR',
-  PRT: 'PT',
-  MEX: 'MX',
-  CHL: 'CL',
-  COL: 'CO',
-  URY: 'UY',
-  PRY: 'PY',
-};
+import { alpha3ToAlpha2 } from '../common/geo/iso-countries';
 
 /**
  * Resolve o valor de um campo do Pmovel a partir do worker consolidado,
@@ -48,7 +36,7 @@ export class FieldMappingService {
     if (value === null || value === undefined) return value;
     switch (name) {
       case 'alpha3ToAlpha2':
-        return ALPHA3_TO_ALPHA2[String(value)] ?? '';
+        return alpha3ToAlpha2(value) ?? '';
       case 'trimJobTitle':
         // "Analista de Sistemas - Fulano de Tal" -> "Analista de Sistemas"
         return String(value).split(' - ')[0].trim();

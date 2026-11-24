@@ -24,6 +24,9 @@ export interface ConsolidatedWorker {
   jobTitle?: string;
   /** País ISO 3166-1 alpha-2 (ex.: BR). */
   countryAlpha2?: string;
+  /** País do local de trabalho no Workday (id interno e nome). */
+  countryId?: string | null;
+  countryName?: string | null;
   /** País ISO 3166-1 alpha-3 (ex.: BRA). */
   countryAlpha3?: string;
   supervisoryOrganization?: string;

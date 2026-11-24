@@ -1,4 +1,5 @@
-import { WorkdayClient } from './workday.client';
+import { Logger } from '@nestjs/common';
+import { WorkdayClient, WqlWorkerRow } from './workday.client';
 import { AppConfigService } from '../config/app-config.service';
 
 /** AppConfigService fake com credenciais fictícias (nenhum segredo real). */
@@ -135,5 +136,149 @@ describe('WorkdayClient', () => {
       name: 'RestClientError',
       status: 400,
     });
+  });
+});
+
+describe('WorkdayClient: país (ISO alpha-2) e cargo da Fase 1', () => {
+  const USA = { id: 'country-usa', descriptor: 'United States of America' };
+  const GBR = { id: 'country-gbr', descriptor: 'United Kingdom' };
+
+  function clientWith(
+    rows: WqlWorkerRow[],
+    staffingByWid: Record<string, unknown>,
+  ) {
+    const client = new WorkdayClient(makeConfig());
+    jest.spyOn(client, 'queryWql').mockImplementation(async function* () {
+      yield* rows as never[];
+    } as never);
+    const getResource = jest
+      .spyOn(client, 'getResource')
+      .mockImplementation(async (path: string) => {
+        const wid = path.split('/').pop()!;
+        const res = staffingByWid[wid];
+        if (res instanceof Error) throw res;
+        return res as never;
+      });
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    return { client, getResource };
+  }
+
+  async function collect(client: WorkdayClient) {
+    const out = [];
+    for await (const w of client.listConsolidatedWorkersViaWql()) out.push(w);
+    return out;
+  }
+
+  const staffing = (alpha3: string) => ({
+    primaryJob: {
+      location: { country: { 'ISO_3166-1_Alpha-3_Code': alpha3 } },
+    },
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('consolidateFromWql usa o título do cargo e guarda o país do Workday', () => {
+    const w = WorkdayClient.consolidateFromWql({
+      employeeID: '21001',
+      jobTitle: 'Chief Executive Officer',
+      jobCode: 'Chief_Executive_Officer',
+      locationAddress_Country: USA,
+    });
+    expect(w.jobTitle).toBe('Chief Executive Officer');
+    expect(w.countryId).toBe('country-usa');
+    expect(w.countryName).toBe('United States of America');
+    expect(w.countryAlpha2).toBeUndefined();
+  });
+
+  it('sem título, usa o código do cargo', () => {
+    const w = WorkdayClient.consolidateFromWql({
+      employeeID: '1',
+      jobTitle: '',
+      jobCode: 'Analista_Sistemas',
+    });
+    expect(w.jobTitle).toBe('Analista_Sistemas');
+  });
+
+  it('countryIsoFromStaffing aceita alpha-2 ou converte alpha-3', () => {
+    expect(WorkdayClient.countryIsoFromStaffing(staffing('USA'))).toBe('US');
+    expect(WorkdayClient.countryIsoFromStaffing(staffing('GBR'))).toBe('GB');
+    expect(
+      WorkdayClient.countryIsoFromStaffing({
+        primaryJob: {
+          location: { country: { 'ISO_3166-1_Alpha-2_Code': 'ca' } },
+        },
+      }),
+    ).toBe('CA');
+    expect(
+      WorkdayClient.countryIsoFromStaffing(staffing('ZZZ')),
+    ).toBeUndefined();
+    expect(WorkdayClient.countryIsoFromStaffing({})).toBeUndefined();
+  });
+
+  it('resolve o ISO uma vez por país e aplica a todos os workers desse país', async () => {
+    const { client, getResource } = clientWith(
+      [
+        { employeeID: '1', workdayID: 'w1', locationAddress_Country: USA },
+        { employeeID: '2', workdayID: 'w2', locationAddress_Country: USA },
+        { employeeID: '3', workdayID: 'w3', locationAddress_Country: GBR },
+        { employeeID: '4', workdayID: 'w4', locationAddress_Country: USA },
+      ],
+      { w1: staffing('USA'), w3: staffing('GBR') },
+    );
+
+    const workers = await collect(client);
+
+    expect(workers.map((w) => w.countryAlpha2)).toEqual([
+      'US',
+      'US',
+      'GB',
+      'US',
+    ]);
+    expect(getResource).toHaveBeenCalledTimes(2);
+
+    // Segunda execução: o cache vale pelo processo, nenhuma chamada nova.
+    await collect(client);
+    expect(getResource).toHaveBeenCalledTimes(2);
+  });
+
+  it('se o worker consultado não traz o país, tenta o próximo do mesmo país', async () => {
+    const { client, getResource } = clientWith(
+      [
+        { employeeID: '1', workdayID: 'w1', locationAddress_Country: USA },
+        { employeeID: '2', workdayID: 'w2', locationAddress_Country: USA },
+      ],
+      { w1: new Error('404 demitido'), w2: staffing('USA') },
+    );
+
+    const workers = await collect(client);
+
+    expect(workers.map((w) => w.countryAlpha2)).toEqual([undefined, 'US']);
+    expect(getResource).toHaveBeenCalledTimes(2);
+  });
+
+  it('desiste do país após 3 tentativas na mesma execução', async () => {
+    const rows = ['1', '2', '3', '4', '5'].map((id) => ({
+      employeeID: id,
+      workdayID: `w${id}`,
+      locationAddress_Country: USA,
+    }));
+    const { client, getResource } = clientWith(rows, {});
+
+    const workers = await collect(client);
+
+    expect(workers.every((w) => w.countryAlpha2 === undefined)).toBe(true);
+    expect(getResource).toHaveBeenCalledTimes(3);
+  });
+
+  it('worker sem país no Workday fica sem país (sem chamada REST)', async () => {
+    const { client, getResource } = clientWith(
+      [{ employeeID: '1', workdayID: 'w1' }],
+      {},
+    );
+
+    const [worker] = await collect(client);
+
+    expect(worker.countryAlpha2).toBeUndefined();
+    expect(getResource).not.toHaveBeenCalled();
   });
 });

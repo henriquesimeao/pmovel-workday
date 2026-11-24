@@ -8,6 +8,54 @@ import {
   WorkdayCollection,
 } from './workday.types';
 import { ConsolidatedWorker } from './consolidated-worker';
+import { alpha3ToAlpha2 } from '../common/geo/iso-countries';
+
+/** Instância do Workday como o WQL devolve (`{ id, descriptor }`). */
+interface WqlInstance {
+  id?: string;
+  descriptor?: string;
+}
+
+/** Linha da query WQL da Fase 1 (`EMPLOYEES_WQL`). Qualquer campo pode faltar. */
+export interface WqlWorkerRow {
+  employeeID?: string;
+  workdayID?: string;
+  legalNameInGeneralDisplayFormat?: string;
+  primaryWork_Email?: unknown;
+  hireDate?: string | null;
+  terminationDate?: string | null;
+  currentlyActive?: unknown;
+  company_ID?: string | null;
+  company?: WqlInstance | null;
+  dateOfBirth?: string;
+  isManager?: unknown;
+  jobTitle?: string;
+  jobCode?: string;
+  locationAddress_Country?: WqlInstance | null;
+  nationalIdentifiers?: unknown;
+}
+
+/** Recorte do `common/v1/workers/{id}` usado na consolidação REST. */
+export interface CommonWorker {
+  descriptor?: string;
+  dateOfBirth?: string;
+  isManager?: boolean;
+}
+
+/** Recorte do `staffing/v6/workers/{id}` usado na consolidação e no país. */
+export interface StaffingWorker {
+  descriptor?: string;
+  workerId?: string;
+  person?: { email?: string };
+  primaryJob?: {
+    descriptor?: string;
+    location?: { country?: Record<string, string | undefined> };
+    supervisoryOrganization?: {
+      descriptor?: string;
+      Organization_Reference_ID?: string;
+    };
+  };
+}
 
 /**
  * Cliente da REST API do Workday (OAuth 2.0 via refresh_token).
@@ -213,6 +261,7 @@ export class WorkdayClient extends BaseRestClient {
    */
   static readonly EMPLOYEES_WQL = `
     SELECT employeeID,
+           workdayID,
            legalNameInGeneralDisplayFormat,
            primaryWork_Email,
            hireDate,
@@ -222,26 +271,104 @@ export class WorkdayClient extends BaseRestClient {
            company,
            dateOfBirth,
            isManager,
+           jobTitle,
            jobCode,
+           locationAddress_Country,
            nationalIdentifiers
     FROM allActiveAndTerminatedWorkers
   `;
 
-  /** Itera os workers da Fase 1 já consolidados, via WQL. */
+  /** Tentativas, por execução, de descobrir o código ISO de um país. */
+  private static readonly COUNTRY_LOOKUP_ATTEMPTS = 3;
+
+  /** País do Workday (id interno) → ISO alpha-2. Países não mudam: vale pelo processo. */
+  private readonly countryIsoCache = new Map<string, string>();
+
+  /**
+   * Itera os workers da Fase 1 já consolidados, via WQL, com o país (ISO
+   * alpha-2) resolvido.
+   */
   async *listConsolidatedWorkersViaWql(): AsyncGenerator<ConsolidatedWorker> {
-    for await (const row of this.queryWql<Record<string, any>>(
+    const attempts = new Map<string, number>();
+    for await (const row of this.queryWql<WqlWorkerRow>(
       WorkdayClient.EMPLOYEES_WQL,
     )) {
-      yield WorkdayClient.consolidateFromWql(row);
+      const worker = WorkdayClient.consolidateFromWql(row);
+      worker.countryAlpha2 = await this.countryAlpha2For(row, attempts);
+      yield worker;
     }
+  }
+
+  /**
+   * Código ISO alpha-2 do país do worker.
+   *
+   * O WQL devolve o país só como instância (`{ id, descriptor }`), sem o código
+   * ISO. O código vem do `staffing/v6` de um worker desse país
+   * (`primaryJob.location.country`), uma vez por país: o resultado fica em
+   * cache, então são poucas chamadas por execução (uma por país). Se o worker
+   * consultado não trouxer o país (ex.: demitido sem cargo), tenta o próximo
+   * worker do mesmo país, até `COUNTRY_LOOKUP_ATTEMPTS` vezes.
+   */
+  private async countryAlpha2For(
+    row: WqlWorkerRow,
+    attempts: Map<string, number>,
+  ): Promise<string | undefined> {
+    const country = row.locationAddress_Country;
+    const countryId = country?.id;
+    if (!countryId) return undefined;
+
+    const cached = this.countryIsoCache.get(countryId);
+    if (cached) return cached;
+
+    const tried = attempts.get(countryId) ?? 0;
+    if (tried >= WorkdayClient.COUNTRY_LOOKUP_ATTEMPTS || !row.workdayID) {
+      return undefined;
+    }
+    attempts.set(countryId, tried + 1);
+
+    try {
+      const staffing = await this.getResource<StaffingWorker>(
+        `staffing/v6/{tenant}/workers/${row.workdayID}`,
+      );
+      const iso = WorkdayClient.countryIsoFromStaffing(staffing);
+      if (iso) {
+        this.countryIsoCache.set(countryId, iso);
+        return iso;
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        `país "${country?.descriptor ?? countryId}": falha ao ler o código ISO (${message})`,
+      );
+    }
+    if (tried + 1 >= WorkdayClient.COUNTRY_LOOKUP_ATTEMPTS) {
+      this.logger.warn(
+        `país "${country?.descriptor ?? countryId}": código ISO não encontrado após ${WorkdayClient.COUNTRY_LOOKUP_ATTEMPTS} tentativas; os workers desse país ficam sem país`,
+      );
+    }
+    return undefined;
+  }
+
+  /** ISO alpha-2 do país do cargo principal (aceita alpha-2 ou alpha-3). */
+  static countryIsoFromStaffing(
+    staffing: StaffingWorker | null | undefined,
+  ): string | undefined {
+    const country = staffing?.primaryJob?.location?.country;
+    const alpha2 = country?.['ISO_3166-1_Alpha-2_Code'];
+    if (typeof alpha2 === 'string' && /^[A-Za-z]{2}$/.test(alpha2.trim())) {
+      return alpha2.trim().toUpperCase();
+    }
+    return alpha3ToAlpha2(country?.['ISO_3166-1_Alpha-3_Code']);
   }
 
   /**
    * Consolida um `ConsolidatedWorker` a partir de uma linha do WQL.
    * Lógica pura (testável sem rede). Normaliza os campos que a API devolve como
-   * objeto (`company`) para o descritor/id legível.
+   * objeto (`company`, `locationAddress_Country`) para o descritor/id legível.
+   * O código ISO do país não vem no WQL: é preenchido por
+   * `listConsolidatedWorkersViaWql`.
    */
-  static consolidateFromWql(row: Record<string, any>): ConsolidatedWorker {
+  static consolidateFromWql(row: WqlWorkerRow): ConsolidatedWorker {
     const companyObj =
       row.company && typeof row.company === 'object' ? row.company : undefined;
     const active = WorkdayClient.toBool(row.currentlyActive);
@@ -252,7 +379,10 @@ export class WorkdayClient extends BaseRestClient {
       email: WorkdayClient.extractEmail(row.primaryWork_Email),
       dateOfBirth: row.dateOfBirth ?? undefined,
       isManager: WorkdayClient.toBool(row.isManager),
-      jobTitle: row.jobCode ?? undefined,
+      // Título legível do cargo; o código (jobCode) só quando não há título.
+      jobTitle: row.jobTitle || row.jobCode || undefined,
+      countryId: row.locationAddress_Country?.id ?? null,
+      countryName: row.locationAddress_Country?.descriptor ?? null,
       // company_ID é o identificador legível da legal entity (ex.: "NLE USA").
       legalEntity: row.company_ID ?? companyObj?.descriptor ?? undefined,
       legalEntityId: row.company_ID ?? companyObj?.id ?? undefined,
@@ -327,10 +457,8 @@ export class WorkdayClient extends BaseRestClient {
    */
   async getConsolidatedWorker(id: string): Promise<ConsolidatedWorker> {
     const [common, staffing] = await Promise.all([
-      this.getResource<Record<string, any>>(`common/v1/{tenant}/workers/${id}`),
-      this.getResource<Record<string, any>>(
-        `staffing/v6/{tenant}/workers/${id}`,
-      ),
+      this.getResource<CommonWorker>(`common/v1/{tenant}/workers/${id}`),
+      this.getResource<StaffingWorker>(`staffing/v6/{tenant}/workers/${id}`),
     ]);
     return WorkdayClient.consolidate(id, common, staffing);
   }
@@ -338,8 +466,8 @@ export class WorkdayClient extends BaseRestClient {
   /** Lógica pura de consolidação (testável sem rede). */
   static consolidate(
     id: string,
-    common: Record<string, any>,
-    staffing: Record<string, any>,
+    common: CommonWorker,
+    staffing: StaffingWorker,
   ): ConsolidatedWorker {
     const country = staffing?.primaryJob?.location?.country ?? {};
     return {
