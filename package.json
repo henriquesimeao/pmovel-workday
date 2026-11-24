@@ -22,6 +22,7 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/persistence/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/persistence/data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/persistence/data-source.ts",
+    "seed:cnpj": "node --env-file=.env -r ts-node/register src/persistence/seeds/run-cnpj-mapping-seed.ts",
     "ref:test:connection": "node --env-file=.env src/test-connection.js",
     "ref:workers:list": "node --env-file=.env src/list-workers.js"
   },

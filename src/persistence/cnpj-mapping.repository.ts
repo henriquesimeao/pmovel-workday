@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { CnpjMapping } from './entities/cnpj-mapping.entity';
 
 /**
@@ -14,21 +14,39 @@ export class CnpjMappingRepository {
     private readonly mappings: Repository<CnpjMapping>,
   ) {}
 
-  /** Cria/atualiza um de/para. */
-  upsert(input: {
+  /**
+   * Cria ou atualiza um de/para. A chave é o `legalEntityId`; sem ele, o
+   * `legalEntityName` (entre os registros sem id).
+   */
+  async upsert(input: {
     legalEntityId?: string | null;
     legalEntityName: string;
     cnpj: string;
     active?: boolean;
   }): Promise<CnpjMapping> {
+    const legalEntityId = input.legalEntityId ?? null;
+    const existing = await this.findByKey(legalEntityId, input.legalEntityName);
     return this.mappings.save(
       this.mappings.create({
-        legalEntityId: input.legalEntityId ?? null,
+        ...(existing ?? {}),
+        legalEntityId,
         legalEntityName: input.legalEntityName,
         cnpj: input.cnpj,
         active: input.active ?? true,
       }),
     );
+  }
+
+  /** De/para pela chave: `legalEntityId`, ou o nome quando não há id. */
+  findByKey(
+    legalEntityId: string | null,
+    legalEntityName: string,
+  ): Promise<CnpjMapping | null> {
+    return this.mappings.findOne({
+      where: legalEntityId
+        ? { legalEntityId }
+        : { legalEntityId: IsNull(), legalEntityName },
+    });
   }
 
   /**
