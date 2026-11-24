@@ -52,9 +52,25 @@ A migration inicial (`InitialSchema`) cria as quatro tabelas no dialeto MySQL.
 ## Operação
 
 **Estado em dev:** database `integration_workday` em `127.0.0.1`, migration
-`InitialSchema` aplicada, 4 registros em `cnpj_mapping`, runs 1 a 11 em `sync_run`.
-Os dados de `cnpj_mapping` **não estão no git**: em outro ambiente, insira os pares
-(`legalEntityId`, `legalEntityName`, `cnpj` só com números, `active = 1`).
+`InitialSchema` aplicada, 4 registros em `cnpj_mapping`, runs 1 a 12 em `sync_run`.
+
+**De/para de CNPJ (`cnpj_mapping`)**: versionado por ambiente em
+`seeds/cnpj-mapping/<ambiente>.json` e aplicado com o seed:
+
+```bash
+npm run seed:cnpj -- seeds/cnpj-mapping/development.json --dry-run   # só mostra
+npm run seed:cnpj -- seeds/cnpj-mapping/development.json             # grava
+# produção (sem .env, a partir do build; DB_* no ambiente do processo):
+node dist/persistence/seeds/run-cnpj-mapping-seed.js seeds/cnpj-mapping/production.json
+```
+
+Cada item do arquivo: `legalEntityId` (o `company_ID` do Workday, ou o id interno
+quando a empresa não tem `company_ID`; `null` usa o nome como chave),
+`legalEntityName`, `cnpj` (14 letras/números; a máscara é removida) e `active`
+(opcional, padrão `true`; `false` desativa o de/para). O seed valida o arquivo
+inteiro antes de gravar, grava numa transação, é idempotente (reaplicar não muda
+nada) e **nunca apaga** o que está no banco e fora do arquivo: só lista esses
+registros no relatório.
 
 **Run presa em `running`** (a aplicação caiu no meio de uma execução) bloqueia as
 próximas com 409. Para liberar:

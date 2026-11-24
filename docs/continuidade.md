@@ -21,11 +21,11 @@ dele, o trabalho foi de **validação contra sistemas reais** e de ajustes de re
 de negócio, listados na seção 5.
 
 **Números do estado atual**
-- 144 testes unitários e 9 e2e passando; build e lint sem erros (6 avisos de `any`).
+- 170 testes unitários e 9 e2e passando; build e lint sem erros nem avisos.
 - Código em `main`, sincronizado com o GitHub (`henriquesimeao/pmovel-workday`).
-- Última execução real em dev (run 4): 112 workers lidos → **75 atualizados,
+- Última execução real em dev (run 12): 112 workers lidos → **75 atualizados,
   30 demitidos ignorados (nunca existiram no Pmovel), 7 falhas** (todas esperadas,
-  ver seção 4).
+  ver seção 4). Desde a run 12, país (`US`/`CA`/`GB`) e título do cargo reais.
 
 ## 2. Como retomar (do zero)
 
@@ -83,9 +83,10 @@ obrigatória ausente.
 - **MySQL `integration_workday`**: migration `InitialSchema` aplicada (schema
   conferido contra as entidades: 0 divergências). Tabelas: `sync_run`, `sync_item`,
   `cnpj_mapping`, `sync_cursor`.
-  - `sync_run` tem as runs 1 a 11. A run 9 está `failed` de propósito (ensaio de
-    queda com `kill -9` e recuperação ao subir); a 10 e a 11 repetem o resultado da 4.
-  - `cnpj_mapping` tem as 4 empresas (abaixo). **Esses dados não estão no git.**
+  - `sync_run` tem as runs 1 a 12. A run 9 está `failed` de propósito (ensaio de
+    queda com `kill -9` e recuperação ao subir).
+  - `cnpj_mapping` tem as 4 empresas (abaixo), versionadas em
+    `seeds/cnpj-mapping/development.json` (`npm run seed:cnpj -- <arquivo>`).
 - **De/para de CNPJ** (empresa do Workday → CNPJ do cliente no Pmovel):
 
   | Chave (`legalEntityId`) | Empresa | CNPJ |
@@ -103,7 +104,7 @@ obrigatória ausente.
 - **Workday de dev**: tenant de demonstração, com 112 workers (82 ativos, 30
   demitidos), documentos todos estrangeiros (SSN, SIN, NINO), nenhum CPF brasileiro.
 
-## 4. Resultado da última execução (run 4) e itens pendentes de ação
+## 4. Resultado da última execução (run 12) e itens pendentes de ação
 
 | Resultado | Qtde |
 |---|---:|
@@ -117,23 +118,16 @@ As 7 falhas, todas por regra e **nenhuma é bug**:
 |---|---|---|
 | 100006, 100010, 21511 | sem documento e sem e-mail | RH completar o cadastro no Workday |
 | 21047 | sem documento | RH completar o cadastro no Workday |
-| 100011 | documento `000000000` (recusado por regra) | corrigir o documento no Workday |
+| 100011 | documento `000000000` não aceito (regra) | corrigir o documento no Workday |
+| 21609 | documento `AB123456C` não aceito: os dígitos correspondem ao valor recusado `123456` | corrigir o documento no Workday |
 | **21624** | **TRATAMENTO MANUAL**: e-mail já usado pelo 21135 (outra empresa) | decisão de negócio: pessoa em duas empresas (ver seção 6) |
-| **21609** | **TRATAMENTO MANUAL**: os dígitos de `AB123456C` (`123456`) colidem com 2 colaboradores de teste | decidir o que fazer com os registros de teste (abaixo) |
 
-**21609, causa confirmada.** O Pmovel compara também os dígitos do documento
-(`AB123456C` → `123456`) com todos os ativos de todos os clientes. Dois colaboradores
-de teste têm `cpf = 123456`:
-
-| id | client_id | Cliente | e-mail |
-|---|---|---|---|
-| 115160 | 548 | PMOVEL TESTE ROGERIO | `FUNC.04` |
-| 197011 | 1331 | PMOVEL - DEMO LATAM (AB) | `TESTEESPN` |
-
-Pendente: decidir se esses registros de teste são inativados/corrigidos (aí o 21609
-entra na próxima execução) e se o time do Pmovel ajusta o `getCpfs` para não comparar
-só os dígitos de documento com letras. Verificar se esses registros também existem
-na base de produção.
+**Por que `123456` é recusado** (caso 21609). O Pmovel compara também os dígitos
+de um documento com letras (`AB123456C` → `123456`) com todos os ativos de todos os
+clientes, e dois colaboradores de teste têm `cpf = 123456` (ids 115160, cliente
+"PMOVEL TESTE ROGERIO", e 197011, cliente "PMOVEL - DEMO LATAM (AB)"). Decisão do
+usuário: `123456` entra na lista de documentos recusados, como o `000000000`, e o
+integrador compara também só os dígitos.
 
 ## 5. O que foi feito (linha do tempo resumida)
 
@@ -165,7 +159,9 @@ na base de produção.
 | Grupo, sindicato e jornada: `DEFAULT`/`DEFAULT` (code e name) **só na admissão** | sem equivalente no Workday; o Pmovel cadastra sozinho com `_code` + `_name` |
 | Esses três campos **nunca** vão no `PUT` (`immutableOnUpdate`) | podem ter sido alterados à mão no Pmovel; comprovado na API real |
 | Campo `cpf`: CPF brasileiro (só dígitos); senão o documento principal estrangeiro; **sem espaços** | regra do usuário |
-| Documento `000000000` é recusado (a pessoa não é integrada) | já existe pessoa com esse valor no Pmovel, causa conflito |
+| Documentos `000000000` e `123456` são recusados (a pessoa não é integrada; falha "documento não aceito"), comparando também só os dígitos | já existem pessoas com esses valores no Pmovel, causam conflito; o Pmovel compara os dígitos |
+| `country` = país do local de trabalho (WQL `locationAddress_Country`), em ISO alpha-2 | o WQL não traz o código ISO: ele é lido do `staffing/v6` de um worker de cada país (uma chamada por país, em cache) |
+| `job_position` = título do cargo (WQL `jobTitle`); `jobCode` só sem título | o código não é legível |
 | Sem e-mail no Workday: gera `<documento>@<empresa>.com` | e-mail é obrigatório no Pmovel; regra do usuário |
 | E-mail gerado **não** é reenviado no `PUT` | pode ter sido corrigido à mão |
 | `PUT` não envia campos vazios | string vazia apagaria o dado no Pmovel |
@@ -206,24 +202,25 @@ diferentes.
 4. **Sem diff incremental.** O cursor (`sync_cursor`) é gravado, mas `fetchItems`
    ignora o `since`: toda execução lê tudo e faz uma consulta ao Pmovel por worker.
    Para volume alto, filtrar no WQL por data de alteração.
-5. **`country` fixo em `BR`.** Os workers de EUA, Canadá e Reino Unido vão como `BR`.
-   Buscar o país no WQL (ex.: `primaryWork_Country`) quando importar.
-6. **Campos não mapeados**: `job_position` recebe o `jobCode` (código, não o título),
-   e `manager_external_id`, `is_hr_manager`, `home_office`, `job_level`, `job_family*`,
-   `gmt` ficam fora.
-7. **`cnpj_mapping` só existe no banco**, sem seed versionado nem endpoint. Em outro
-   ambiente é preciso inserir os pares à mão. Candidato: um seed por ambiente ou um
-   endpoint de administração.
-8. **E-mail gerado usa um domínio inventado** (`...@empresa.com`). Se o Pmovel enviar
-   notificações por e-mail, elas irão para endereços que não existem. Vale confirmar
-   com o time do Pmovel.
+5. **`country` e título do cargo: resolvidos.** Worker cujo país não tiver código ISO
+   resolvido falha na admissão ("país ... sem código ISO") e, na atualização, não
+   envia `country`.
+6. **Campos não mapeados**: `manager_external_id`, `is_hr_manager`, `home_office`,
+   `job_level`, `job_family*` e `gmt` ficam fora.
+7. **De/para de CNPJ: resolvido com seed versionado** (`seeds/cnpj-mapping/<ambiente>.json`,
+   ver `docs/banco-de-dados.md`). Para homologação/produção, criar o arquivo do
+   ambiente. Não há endpoint de administração: a aplicação não tem autenticação, e
+   um endpoint de escrita sem ela seria um risco.
+8. **E-mail gerado usa um domínio inventado** (`...@empresa.com`). Decisão do
+   usuário: manter assim.
 9. **Grupo, sindicato e jornada** seguem `DEFAULT`. Em produção, definir se haverá
    de/para por dimensão do Workday. A config suporta (modos `direct`/`lookup`/`default`).
 
 ### Prioridade baixa
 10. O agendador (`SYNC_SCHEDULE_ENABLED`) está **desligado** e nunca rodou de verdade
-    (só testes unitários).
-11. Os 6 avisos de lint são `any` no parsing das linhas do WQL.
+    (só testes unitários). Decisão do usuário: deixar para depois.
+11. **A aplicação não tem autenticação** nos endpoints (`/sync/*`). Antes de expor
+    fora da rede interna, proteger (token, rede privada ou proxy).
 12. O `.env` de dev contém credenciais antigas (usuário/senha do Workday que o código
     não usa e client id/secret comentados). Limpar quando for conveniente. O arquivo
     não é versionado.
@@ -273,15 +270,12 @@ diferentes.
 
 ## 9. Próximos passos sugeridos
 
-1. Decidir o destino dos 2 registros de teste com `cpf = 123456` (seção 4) e se o
-   `getCpfs` do Pmovel será ajustado.
-2. Trazer `country` real e o título do cargo no WQL (pendências 5 e 6).
-3. Implementar o diff incremental (pendência 4) quando o volume exigir.
-4. Habilitar e observar o agendador em dev (pendência 10).
-5. **Preparar homologação/produção**: seguir `docs/workday-novo-cliente.md` no tenant
+1. Implementar o diff incremental (pendência 4) quando o volume exigir.
+2. Habilitar e observar o agendador em dev (pendência 10), quando for a hora.
+3. **Preparar homologação/produção**: seguir `docs/workday-novo-cliente.md` no tenant
    do cliente, definir o de/para de CNPJ real e os valores de grupo/sindicato/jornada
-   (pendências 7 e 9), e revisar o e-mail gerado (pendência 8).
-6. **Fase 2** (Pmovel → Workday: horas extras e verbas): origem
+   (pendências 7 e 9), e proteger os endpoints (pendência 11).
+4. **Fase 2** (Pmovel → Workday: horas extras e verbas): origem
    `POST /v3/reports/event_totals`; falta descobrir o destino de escrita no Workday e
    liberar permissões de escrita. Ver `docs/roadmap-fases.md`. A fundação
    (`PhaseSyncJob`, `JobRegistry`, clientes, persistência) já suporta uma nova fase.

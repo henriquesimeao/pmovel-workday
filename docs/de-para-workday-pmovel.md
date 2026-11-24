@@ -38,9 +38,10 @@ novo refresh token (passo a passo em `docs/workday-novo-cliente.md`), uma única
 query no data source **`allActiveAndTerminatedWorkers`** traz todos os campos:
 
 ```sql
-SELECT employeeID, legalNameInGeneralDisplayFormat, primaryWork_Email,
+SELECT employeeID, workdayID, legalNameInGeneralDisplayFormat, primaryWork_Email,
        hireDate, terminationDate, currentlyActive, company_ID, company,
-       dateOfBirth, isManager, jobCode, nationalIdentifiers
+       dateOfBirth, isManager, jobTitle, jobCode, locationAddress_Country,
+       nationalIdentifiers
 FROM allActiveAndTerminatedWorkers
 ```
 
@@ -68,8 +69,8 @@ Campos WQL do data source `allActiveAndTerminatedWorkers`.
 | `dt_admissao` | ✔ | `hireDate` | 🟢 | Presente em 100% dos workers no tenant. |
 | `dt_demissao` | — | `terminationDate` | 🟢 | Presente nos terminados (usado na demissão/`inactivate`). |
 | `dt_nascimento` | — | `dateOfBirth` | 🟢 | PII — não logar valor. |
-| `country` | ✔ | — (default `BR`) | 🟡 | Não incluído na query atual; default `BR`. Pode-se adicionar `primaryWork_Country` ao WQL se necessário. |
-| `job_position` | — | `jobCode` | 🟡 | Código do cargo (ex.: `Analista_Sistemas`). Se preferir o título legível, adicionar `businessTitle`/`jobProfile` à query. |
+| `country` | ✔ | `locationAddress_Country` → ISO alpha-2 | 🟢 | País do local de trabalho. O WQL devolve só `{ id, descriptor }`; o código ISO vem do `staffing/v6` de um worker de cada país (`primaryJob.location.country`, alpha-3 convertido para alpha-2), uma chamada por país, em cache. Sem código: a admissão falha com o motivo e a atualização não envia `country`. Em dev: `US`, `CA`, `GB`. |
+| `job_position` | — | `jobTitle` (senão `jobCode`) | 🟢 | Título do cargo (ex.: `Chief Executive Officer`). O código (`jobCode`) só quando não há título. |
 | `is_manager` | ✔ | `isManager` | 🟢 | Booleano. |
 | `is_hr_manager` | — | — | 🔴 | Sem equivalente. Default `false`. |
 | `home_office` | — | — | 🔴 | Sem equivalente. Default `false`. |
@@ -134,11 +135,14 @@ Regras do campo, aplicadas na criação **e** na atualização
 
 - **Sem espaços**: `AB 12 34 56 C` vai como `AB123456C`, `123 456 789` como
   `123456789`. Hífens são mantidos (`123-45-6789`). Letras do NINO britânico também.
-- **Documento recusado**: `000000000` (valor de preenchimento que já existe no
-  Pmovel e causa conflito). A comparação ignora espaços, pontuação e caixa, então
-  `000 000 000` e `000-00-0000` também são recusados. Quem tem esse documento
-  **não é integrado**: o item falha com `documento inválido`, mesmo se tiver e-mail
-  real, e o e-mail gerado não é montado a partir dele. A lista fica em
+- **Documentos recusados**: `000000000` e `123456` (valores que já existem no
+  Pmovel e causam conflito). A comparação ignora espaços, pontuação e caixa, então
+  `000 000 000` e `000-00-0000` também são recusados. Como o Pmovel compara também
+  só os dígitos de um documento com letras, o integrador faz o mesmo: `AB123456C`
+  é recusado por corresponder a `123456`. Quem tem um desses documentos **não é
+  integrado**: o item falha com `documento não aceito: "<documento>" corresponde ao
+  valor recusado <valor>`, mesmo se tiver e-mail real, e o e-mail gerado não é
+  montado a partir dele. A lista fica em
   `invalidDocuments`, em `src/mapping/mapping.config.ts`.
 - Demissão não depende do documento: um demitido com documento recusado ainda é
   inativado se existir no Pmovel.

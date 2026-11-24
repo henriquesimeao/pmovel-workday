@@ -178,7 +178,8 @@ O `PUT` da atualização:
   (grupo, sindicato e jornada, com `_code` e `_name`);
 - **não envia o e-mail gerado** (só o e-mail real do Workday);
 - **não envia campos vazios**: uma string vazia apagaria o dado no Pmovel;
-- **recusa quem tem documento inválido** (`000000000`), como na criação.
+- **recusa quem tem documento não aceito** (`000000000`, `123456`, comparando também
+  só os dígitos), como na criação.
 
 ### Execução com `cpf` sem espaços (run 3, dev)
 
@@ -213,7 +214,10 @@ Por isso um NINO como `AB123456C` pode colidir com qualquer colaborador ativo de
 qualquer cliente que tenha `123456` no campo `cpf`, e um SSN pode colidir com um SIN
 de mesmos dígitos. É a explicação do 100011 (`000000000`, já cadastrado) e do 21609
 (confirmado: dois colaboradores de teste de outros clientes, `PMOVEL TESTE ROGERIO` e
-`PMOVEL - DEMO LATAM (AB)`, têm `cpf = 123456`). Para investigar um caso, procure no banco do Pmovel:
+`PMOVEL - DEMO LATAM (AB)`, têm `cpf = 123456`). Por decisão do usuário, `123456`
+passou a ser documento não aceito, e o integrador compara também só os dígitos: o
+21609 agora falha com "documento não aceito" em vez de tratamento manual. Para
+investigar um caso novo, procure no banco do Pmovel:
 
 ```sql
 SELECT * FROM users
@@ -257,10 +261,10 @@ ou documento já existe"). O item volta a ser tentado a cada execução e entra 
 quando o conflito for resolvido no Pmovel.
 
 Não entram nessa marcação: `external_id` duplicado (o integrador atualiza), documento
-recusado (`000000000`) e campos obrigatórios ausentes. Esses são falhas comuns.
+não aceito (`000000000`, `123456`) e campos obrigatórios ausentes. Esses são falhas comuns.
 
 ## Pendências conhecidas da Fase 1
 
 Ausência de
-diff incremental, `country` fixo em `BR` e outros itens estão detalhados, com
+diff incremental, campos ainda não mapeados e outros itens estão detalhados, com
 prioridade e sugestão de correção, em [continuidade.md](continuidade.md#7-pendências-e-riscos-por-prioridade).

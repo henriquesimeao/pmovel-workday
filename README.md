@@ -26,6 +26,7 @@ Arquitetura e decisões de projeto: [docs/arquitetura.md](docs/arquitetura.md).
 npm install
 cp .env.example .env     # preencha: Workday, Pmovel e MySQL
 npm run migration:run    # cria as tabelas no MySQL
+npm run seed:cnpj -- seeds/cnpj-mapping/development.json   # de/para empresa → CNPJ
 npm run start:dev        # compila, sobe e recarrega ao salvar; lê o .env
 ```
 
@@ -53,6 +54,7 @@ ambiente é feita no boot (ver [docs/arquitetura.md](docs/arquitetura.md)).
 | `npm run test:e2e` | Testes end-to-end |
 | `npm run lint` | ESLint + Prettier |
 | `npm run migration:run` | Aplica as migrations do banco (MySQL) |
+| `npm run seed:cnpj -- <arquivo> [--dry-run]` | Aplica o de/para empresa → CNPJ de `seeds/cnpj-mapping/<ambiente>.json` |
 | `npm run ref:test:connection` | **Referência**: testa a conexão com o Workday (código JS original) |
 | `npm run ref:workers:list` | **Referência**: lista workers do Workday (código JS original) |
 
