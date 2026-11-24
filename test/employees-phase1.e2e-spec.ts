@@ -146,7 +146,9 @@ describe('Fase 1 — EmployeeSyncJob (e2e)', () => {
   }
 
   async function runSync(): Promise<number> {
-    const res = await request(app.getHttpServer()).post('/sync/employees/full').expect(201);
+    const res = await request(app.getHttpServer())
+      .post('/sync/employees/full?wait=true')
+      .expect(200);
     return res.body.runId;
   }
 

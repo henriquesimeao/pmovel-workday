@@ -94,6 +94,19 @@ export class SyncRunRepository {
     });
   }
 
+  /** Marca como falha toda run ainda RUNNING. Devolve quantas foram fechadas. */
+  async failAllRunning(errorMessage: string): Promise<number> {
+    const result = await this.runs.update(
+      { status: SyncRunStatus.RUNNING },
+      {
+        status: SyncRunStatus.FAILED,
+        finishedAt: new Date(),
+        errorMessage: errorMessage.slice(0, 2000),
+      },
+    );
+    return result.affected ?? 0;
+  }
+
   /** Indica se existe uma run RUNNING para o par phase/type (lock simples). */
   async hasRunning(phase: string, type: string): Promise<boolean> {
     const count = await this.runs.count({

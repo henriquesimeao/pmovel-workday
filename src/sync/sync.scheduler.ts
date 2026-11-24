@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { SyncOrchestrator, SyncAlreadyRunningError } from './sync.orchestrator';
@@ -12,9 +12,13 @@ import { AppConfigService } from '../config/app-config.service';
  * Usa o SchedulerRegistry para criar o CronJob em runtime (o cron vem do env, e
  * não de um decorator estático). O lock contra concorrência é do orquestrador
  * (hasRunning); aqui apenas logamos o conflito e seguimos.
+ *
+ * O cron só é criado em `onApplicationBootstrap`, depois de todos os
+ * `onModuleInit`: assim a recuperação de runs presas do orquestrador já rodou
+ * e não fecha uma run recém-disparada pelo agendador.
  */
 @Injectable()
-export class SyncScheduler implements OnModuleInit {
+export class SyncScheduler implements OnApplicationBootstrap {
   private readonly logger = new Logger(SyncScheduler.name);
 
   constructor(
@@ -24,7 +28,7 @@ export class SyncScheduler implements OnModuleInit {
     private readonly schedulerRegistry: SchedulerRegistry,
   ) {}
 
-  onModuleInit(): void {
+  onApplicationBootstrap(): void {
     const { cron, scheduleEnabled } = this.config.sync;
     if (!scheduleEnabled) {
       this.logger.log(

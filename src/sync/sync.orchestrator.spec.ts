@@ -10,7 +10,11 @@ import { SyncRunStatus } from '../persistence/entities/sync-run.entity';
 import { SyncOperation } from '../persistence/entities/sync-item.entity';
 import { SyncRunRepository } from '../persistence/sync-run.repository';
 import { SyncCursorRepository } from '../persistence/sync-cursor.repository';
-import { SyncOrchestrator, SyncAlreadyRunningError } from './sync.orchestrator';
+import {
+  SyncOrchestrator,
+  SyncAlreadyRunningError,
+  INTERRUPTED_RUN_MESSAGE,
+} from './sync.orchestrator';
 import { PhaseSyncJob, SyncItemInput, ItemResult } from './phase-sync-job';
 import { ManualReviewError } from './manual-review.error';
 import { Logger } from '@nestjs/common';
@@ -181,5 +185,98 @@ describe('SyncOrchestrator', () => {
     await expect(orchestrator.run(job, 'manual')).rejects.toBeInstanceOf(
       SyncAlreadyRunningError,
     );
+  });
+
+  it('dois disparos simultâneos: só um passa pelo lock', async () => {
+    const job = new FakeJob([{ externalId: '1', payload: {} }]);
+
+    const results = await Promise.allSettled([
+      orchestrator.run(job, 'manual'),
+      orchestrator.run(job, 'manual'),
+    ]);
+
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+      SyncAlreadyRunningError,
+    );
+  });
+
+  it('erro inesperado no meio do lote fecha a run como FAILED e libera o lock', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const job = new FakeJob([{ externalId: '1', payload: {} }]);
+    const save = jest
+      .spyOn(cursors, 'save')
+      .mockRejectedValueOnce(new Error('banco caiu'));
+
+    const runId = await orchestrator.run(job, 'manual');
+    const run = await runs.findById(runId);
+
+    expect(run!.status).toBe(SyncRunStatus.FAILED);
+    expect(run!.errorMessage).toContain('banco caiu');
+    expect(run!.finishedAt).not.toBeNull();
+
+    // o lock foi liberado: a próxima execução roda normalmente
+    save.mockRestore();
+    const next = await runs.findById(await orchestrator.run(job, 'manual'));
+    expect(next!.status).toBe(SyncRunStatus.COMPLETED);
+    jest.restoreAllMocks();
+  });
+
+  it('falha ao gravar item também fecha a run como FAILED', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    jest
+      .spyOn(runs, 'recordItem')
+      .mockRejectedValue(new Error('tabela sync_item indisponível'));
+
+    const runId = await orchestrator.run(
+      new FakeJob([{ externalId: '1', payload: {} }]),
+      'manual',
+    );
+    jest.restoreAllMocks();
+
+    const run = await runs.findById(runId);
+    expect(run!.status).toBe(SyncRunStatus.FAILED);
+    expect(run!.errorMessage).toContain('tabela sync_item indisponível');
+    expect(await cursors.getLastRunAt('fake:job')).toBeNull();
+  });
+
+  it('ao subir, marca como FAILED as runs que ficaram RUNNING', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const stuck = await runs.startRun('fake', 'job', 'manual');
+
+    await orchestrator.onModuleInit();
+    jest.restoreAllMocks();
+
+    const run = await runs.findById(stuck.id);
+    expect(run!.status).toBe(SyncRunStatus.FAILED);
+    expect(run!.errorMessage).toBe(INTERRUPTED_RUN_MESSAGE);
+    expect(await runs.hasRunning('fake', 'job')).toBe(false);
+  });
+
+  it('launch devolve o id com a run RUNNING e conclui em segundo plano', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const job = new FakeJob([{ externalId: '1', payload: {} }]);
+    const original = job.processItem.bind(job);
+    job.processItem = async (item) => {
+      await gate;
+      return original(item);
+    };
+
+    const runId = await orchestrator.launch(job, 'manual');
+    expect((await runs.findById(runId))!.status).toBe(SyncRunStatus.RUNNING);
+    await expect(orchestrator.launch(job, 'manual')).rejects.toBeInstanceOf(
+      SyncAlreadyRunningError,
+    );
+
+    release();
+    await orchestrator.beforeApplicationShutdown();
+
+    const run = await runs.findById(runId);
+    expect(run!.status).toBe(SyncRunStatus.COMPLETED);
+    expect(run!.successCount).toBe(1);
   });
 });

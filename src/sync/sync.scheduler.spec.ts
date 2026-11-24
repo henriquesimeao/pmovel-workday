@@ -65,7 +65,7 @@ describe('SyncScheduler', () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 
-  it('onModuleInit não agenda quando desabilitado', () => {
+  it('onApplicationBootstrap não agenda quando desabilitado', () => {
     const registry = new JobRegistry();
     const orchestrator = { run: jest.fn() } as unknown as SyncOrchestrator;
     const config = {
@@ -80,12 +80,12 @@ describe('SyncScheduler', () => {
       config,
       schedulerRegistry,
     );
-    scheduler.onModuleInit();
+    scheduler.onApplicationBootstrap();
 
     expect(addCronJob).not.toHaveBeenCalled();
   });
 
-  it('onModuleInit agenda quando habilitado', () => {
+  it('onApplicationBootstrap agenda quando habilitado', () => {
     const registry = new JobRegistry();
     const orchestrator = { run: jest.fn() } as unknown as SyncOrchestrator;
     const config = {
@@ -100,7 +100,7 @@ describe('SyncScheduler', () => {
       config,
       schedulerRegistry,
     );
-    scheduler.onModuleInit();
+    scheduler.onApplicationBootstrap();
 
     expect(addCronJob).toHaveBeenCalledWith('sync-all', expect.anything());
 

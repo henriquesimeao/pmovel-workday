@@ -13,6 +13,9 @@ import { AppConfigService } from './config/app-config.service';
 async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+  // SIGTERM/SIGINT disparam os hooks de desligamento: o orquestrador espera a
+  // run em andamento terminar antes de encerrar.
+  app.enableShutdownHooks();
 
   const config = app.get(AppConfigService);
   const port = config.port;

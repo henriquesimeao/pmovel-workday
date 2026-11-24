@@ -69,12 +69,13 @@ describe('Sync (e2e)', () => {
     expect(res.body).toEqual([{ phase: 'employees', type: 'full', key: 'employees:full' }]);
   });
 
-  it('POST /sync/:phase/:type dispara e GET /sync/runs/:id mostra o resultado', async () => {
+  it('POST ?wait=true espera o fim e GET /sync/runs/:id mostra o resultado', async () => {
     const trigger = await request(app.getHttpServer())
-      .post('/sync/employees/full')
-      .expect(201);
+      .post('/sync/employees/full?wait=true')
+      .expect(200);
     const runId = trigger.body.runId;
     expect(runId).toBeDefined();
+    expect(trigger.body.status).toBe('completed');
 
     const runRes = await request(app.getHttpServer()).get(`/sync/runs/${runId}`).expect(200);
     expect(runRes.body.status).toBe('completed');
@@ -82,6 +83,24 @@ describe('Sync (e2e)', () => {
     expect(runRes.body.successCount).toBe(1);
     expect(runRes.body.failureCount).toBe(1);
     expect(runRes.body.items).toHaveLength(2);
+  });
+
+  it('POST sem wait responde 202 com o runId e a run conclui em segundo plano', async () => {
+    const trigger = await request(app.getHttpServer())
+      .post('/sync/employees/full')
+      .expect(202);
+    const { runId, status, statusUrl } = trigger.body;
+    expect(status).toBe('running');
+    expect(statusUrl).toBe(`/sync/runs/${runId}`);
+
+    let run: { status: string; totalCount: number } | undefined;
+    for (let i = 0; i < 50; i++) {
+      run = (await request(app.getHttpServer()).get(statusUrl).expect(200)).body;
+      if (run!.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(run!.status).toBe('completed');
+    expect(run!.totalCount).toBe(2);
   });
 
   it('POST em job inexistente retorna 404', async () => {
