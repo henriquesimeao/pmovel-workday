@@ -282,3 +282,56 @@ describe('WorkdayClient: país (ISO alpha-2) e cargo da Fase 1', () => {
     expect(getResource).not.toHaveBeenCalled();
   });
 });
+
+describe('WorkdayClient.callSoap', () => {
+  let fetchMock: jest.Mock;
+  beforeEach(() => {
+    fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const soapOk =
+    '<env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"><env:Body><wd:R xmlns:wd="urn:com.workday/bsvc"><wd:ID wd:type="WID">w1</wd:ID></wd:R></env:Body></env:Envelope>';
+
+  it('chama /ccx/service/{tenant}/{serviço}/v45.0 com Bearer e o envelope', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockResponse(200, { access_token: 'abc', expires_in: 3600 }),
+      )
+      .mockResolvedValueOnce(mockResponse(200, soapOk));
+    const client = new WorkdayClient(makeConfig());
+
+    const body = await client.callSoap('Payroll', 'Op', '<wd:Op_Request/>');
+
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'https://odpimpl-services1.wd119.myworkday.com/ccx/service/tenant_dev/Payroll/v45.0',
+    );
+    const init = fetchMock.mock.calls[1][1] as RequestInit;
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      'Bearer abc',
+    );
+    expect(String(init.body)).toContain(
+      '<soapenv:Body><wd:Op_Request/></soapenv:Body>',
+    );
+    expect(body).toHaveProperty('R');
+  });
+
+  it('em 401, renova o token e repete uma vez', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockResponse(200, { access_token: 'velho', expires_in: 3600 }),
+      )
+      .mockResolvedValueOnce(mockResponse(401, ''))
+      .mockResolvedValueOnce(
+        mockResponse(200, { access_token: 'novo', expires_in: 3600 }),
+      )
+      .mockResolvedValueOnce(mockResponse(200, soapOk));
+    const client = new WorkdayClient(makeConfig());
+    await client.callSoap('Payroll', 'Op', '<wd:Op_Request/>');
+    const last = fetchMock.mock.calls[3][1] as RequestInit;
+    expect((last.headers as Record<string, string>).Authorization).toBe(
+      'Bearer novo',
+    );
+  });
+});

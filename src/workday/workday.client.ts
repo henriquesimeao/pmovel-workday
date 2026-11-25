@@ -9,6 +9,12 @@ import {
 } from './workday.types';
 import { ConsolidatedWorker } from './consolidated-worker';
 import { alpha3ToAlpha2 } from '../common/geo/iso-countries';
+import {
+  parseSoapResponse,
+  SoapNode,
+  soapEnvelope,
+  WORKDAY_SOAP_VERSION,
+} from './soap/workday-soap';
 
 /** Instância do Workday como o WQL devolve (`{ id, descriptor }`). */
 interface WqlInstance {
@@ -221,6 +227,39 @@ export class WorkdayClient extends BaseRestClient {
     pageSize = 100,
   ): AsyncGenerator<T> {
     return this.paginateOffset<T>(path, params, pageSize);
+  }
+
+  // --- SOAP (web services) ---
+
+  /**
+   * Chama uma operação SOAP do Workday (`/ccx/service/{tenant}/{serviço}/{versão}`)
+   * com o mesmo token OAuth da REST. Em 401, renova o token e repete uma vez.
+   *
+   * @param service serviço SOAP (ex.: `Payroll`, `Payroll_Interface`)
+   * @param operation nome da operação, só para mensagens de erro
+   * @param body XML do request (já com os valores escapados)
+   * @returns o `Body` da resposta; lança `WorkdaySoapError` em fault
+   */
+  async callSoap(
+    service: string,
+    operation: string,
+    body: string,
+  ): Promise<SoapNode> {
+    const url = `${this.servicesHost}/ccx/service/${this.tenant}/${service}/${WORKDAY_SOAP_VERSION}`;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const token = await this.getAccessToken(attempt > 0);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          Authorization: `Bearer ${token}`,
+        },
+        body: soapEnvelope(body),
+      });
+      if (res.status === 401 && attempt === 0) continue;
+      return parseSoapResponse(operation, res.status, await res.text());
+    }
+    throw new Error('callSoap: estado inesperado');
   }
 
   // --- WQL (Workday Query Language) ---
