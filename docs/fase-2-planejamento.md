@@ -5,6 +5,14 @@
 > proposta. As rotas novas da API Pmovel estão em
 > [fase-2-api-pmovel.md](fase-2-api-pmovel.md).
 
+> **Implementado em 25/11/2026** (destinos `payroll_input` e
+> `external_payroll_input`). O comportamento final está em
+> [fase-2-verbas.md](fase-2-verbas.md). Os testes no Workday simplificaram o
+> desenho da seção 5: o mesmo `Payroll_Input_ID` atualiza o lançamento no lugar,
+> então **não há modo `delta`** nem exclusão (a verba que sumiu é gravada com 0), e
+> o envio individual de quem já foi no global **não é recusado** (só atualiza).
+> Time Tracking não foi implementado (API não encontrada).
+
 ## 1. Objetivo
 
 Levar ao Workday, por colaborador e período, as horas extras e demais verbas que o
@@ -86,7 +94,7 @@ não o Workday. **Esta é a primeira pergunta a responder (P1).**
 | P8 | Verba sem correspondência | **Registrar a falha no log.** O cliente mantém os códigos iguais nos dois sistemas: o **`ehevents.e_code`** do Pmovel é o código da verba (pay component) no Workday. **Não há tabela de de/para** |
 | W1 | Destino no Workday | **Configurável por integração, cobrindo todos os casos.** Cada instância do integrador atende um tenant; uma variável escolhe o destino: `payroll_input` (Payroll Input, para quem tem Workday Payroll) ou `time_tracking` (horas reportadas, para quem não tem). Ver seção 5 |
 | W2 | Código da verba no Workday | **Igual ao `e_code` do Pmovel** (reference ID do pay component, ou do código de horas no Time Tracking) |
-| W3 | O integrador pode apagar no Workday? | **Não se sabe; as duas possibilidades são suportadas.** Modo `replace` (apaga e grava de novo) e modo `delta` (lança só a diferença). Ver seção 5 |
+| W3 | O integrador pode apagar no Workday? | Decidido inicialmente suportar `replace` e `delta`. **Resolvido pelos testes:** não é preciso apagar; o mesmo `Payroll_Input_ID` atualiza o lançamento, e a verba que sumiu é gravada com 0 |
 | P9 | Reenvio quando o Workday recusa apagar (folha do período já processada) | **O item falha com a mensagem do Workday; o RH faz o ajuste no Workday e reenvia** |
 | P10 | Moeda (obrigatória no Payroll Interface, mesmo para horas) | **Por empresa, coluna `currency` em `cnpj_mapping`**, versionada no seed |
 

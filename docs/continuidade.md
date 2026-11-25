@@ -12,7 +12,7 @@ fases:
 | Fase | Fluxo | Conteúdo | Situação |
 |---|---|---|---|
 | **1** | Workday → Pmovel | Colaboradores: admissão, atualização, demissão | **Implementada e validada em dev**, com pendências (seção 7) |
-| 2 | Pmovel → Workday | Horas extras e verbas de folha | Não iniciada (roadmap) |
+| 2 | Pmovel → Workday | Horas extras e verbas de folha | **Integrador implementado e validado contra o Workday real** (dois destinos); falta a API Pmovel (rotas `payroll_exports`) |
 | 3 | Configurável | Férias | Não iniciada |
 | 4 | Configurável | Afastamentos | Não iniciada |
 
@@ -21,7 +21,7 @@ dele, o trabalho foi de **validação contra sistemas reais** e de ajustes de re
 de negócio, listados na seção 5.
 
 **Números do estado atual**
-- 170 testes unitários e 9 e2e passando; build e lint sem erros nem avisos.
+- 213 testes unitários e 9 e2e passando; build e lint sem erros nem avisos.
 - Código em `main`, sincronizado com o GitHub (`henriquesimeao/pmovel-workday`).
 - Última execução real em dev (run 12): 112 workers lidos → **75 atualizados,
   30 demitidos ignorados (nunca existiram no Pmovel), 7 falhas** (todas esperadas,
@@ -61,6 +61,7 @@ Nomes (os valores estão só no `.env`, que **não** vai para o git):
 | Pmovel | `PmovelBaseUrl`, `PmovelAccessKeyId`, `PmovelSecretAccessKey` |
 | MySQL | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` |
 | Sync | `SYNC_CRON`, `SYNC_SCHEDULE_ENABLED` (default `false`) |
+| Fase 2 | `PAYROLL_EXPORT_ENABLED` (default `false`), `PAYROLL_EXPORT_POLL_SECONDS` (60), `PAYROLL_EXPORT_DESTINATION` (`payroll_input` / `external_payroll_input`) |
 
 Em dev: Pmovel em `http://127.0.0.1:3000` com o client `workday`; banco
 `integration_workday` em `127.0.0.1`. A aplicação **recusa subir** com variável
@@ -83,7 +84,9 @@ obrigatória ausente.
 - **MySQL `integration_workday`**: migration `InitialSchema` aplicada (schema
   conferido contra as entidades: 0 divergências). Tabelas: `sync_run`, `sync_item`,
   `cnpj_mapping`, `sync_cursor`.
-  - `sync_run` tem as runs 1 a 12. A run 9 está `failed` de propósito (ensaio de
+  - Migration `PayrollExport` aplicada (`payroll_input_sent` e
+    `cnpj_mapping.currency`); moedas de dev: USD, CAD, GBP, USD.
+  - `sync_run` tem as runs 1 a 15 (13 a 15: ensaio da Fase 2). A run 9 está `failed` de propósito (ensaio de
     queda com `kill -9` e recuperação ao subir).
   - `cnpj_mapping` tem as 4 empresas (abaixo), versionadas em
     `seeds/cnpj-mapping/development.json` (`npm run seed:cnpj -- <arquivo>`).
@@ -275,10 +278,10 @@ diferentes.
 3. **Preparar homologação/produção**: seguir `docs/workday-novo-cliente.md` no tenant
    do cliente, definir o de/para de CNPJ real e os valores de grupo/sindicato/jornada
    (pendências 7 e 9), e proteger os endpoints (pendência 11).
-4. **Fase 2** (Pmovel → Workday: horas extras e verbas): planejamento em
-   `docs/fase-2-planejamento.md` (todas as decisões tomadas; falta a descoberta no
-   tenant de dev, etapa E1). Rotas novas da API Pmovel especificadas em
-   `docs/fase-2-api-pmovel.md`. A fundação
+4. **Fase 2** (Pmovel → Workday: horas extras e verbas): integrador pronto
+   (`docs/fase-2-verbas.md`). Falta o time do Pmovel construir as rotas de
+   `docs/fase-2-api-pmovel.md` e criar dados de teste em dev; depois, o teste de
+   ponta a ponta com o Pmovel real e ligar `PAYROLL_EXPORT_ENABLED`. A fundação
    (`PhaseSyncJob`, `JobRegistry`, clientes, persistência) já suporta uma nova fase.
 
 ## 10. Mapa do código
@@ -295,6 +298,9 @@ src/
   sync/          sync.orchestrator.ts, phase-sync-job.ts, job-registry.ts,
                  sync.controller.ts, sync.scheduler.ts, manual-review.error.ts
   phases/employees/  employee-sync.job.ts, employees.module.ts
+  phases/payroll-export/  payroll-export.job.ts, payroll-export.poller.ts,
+                 writers/ (Submit_Payroll_Input, Put_External_Payroll_Input)
+  workday/soap/  workday-soap.ts (envelope, escape, parse de resposta e fault)
   health/        health.controller.ts
 test/            e2e (sync.e2e-spec.ts, employees-phase1.e2e-spec.ts)
 src/*.js         código JS de referência original (preservado)
@@ -336,7 +342,8 @@ SELECT legalEntityId, legalEntityName, cnpj, active FROM cnpj_mapping;
 | `docs/de-para-workday-pmovel.md` | cada campo do Pmovel, de onde vem, regras de `cpf` e e-mail |
 | `docs/banco-de-dados.md` | tabelas, migrations e operação do MySQL |
 | `docs/workday-novo-cliente.md` | configurar um tenant Workday do zero (ISU, grupo, domínios, WQL, API Client) |
-| `docs/fase-2-planejamento.md` | Fase 2: origem, destino, decisões, arquitetura e etapas |
+| `docs/fase-2-verbas.md` | Fase 2: como o envio funciona, destinos, regras, configuração, permissões |
+| `docs/fase-2-planejamento.md` | Fase 2: descoberta, decisões e testes no Workday |
 | `docs/fase-2-api-pmovel.md` | Fase 2: especificação das rotas novas da API Pmovel (`payroll_exports`) |
 | `docs/roadmap-fases.md` | Fases 2, 3 e 4 |
 | `docs/referencia-workday-rest.md` | código JS original e histórico da prova de conceito |

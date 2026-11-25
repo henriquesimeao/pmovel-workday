@@ -84,7 +84,8 @@ Resposta 201: a solicitação (mesmo formato da 3.2).
 ### 3.2 `GET /v3/payroll_exports` e `GET /v3/payroll_exports/{id}`
 
 Filtros da listagem: `status`, `target`, `cycle_id`, `page`, `limit`. O integrador
-usa `?status=pending&target=workday`. A ordem é por `requested_at` crescente.
+usa `?status=pending&target=workday`. A ordem é por `requested_at` crescente. **Sem resultados,
+responde `200` com `[]`** (não 404: o integrador trata 404 como rota inexistente).
 
 ```json
 {
@@ -200,8 +201,9 @@ Só para `processing` (senão 409). Grava `status`, `finished_at`, `summary`,
 ```json
 {
   "status": "completed_with_errors",
-  "summary": { "employees": 230, "inputs_sent": 410, "inputs_deleted": 0,
-               "failures": 2 },
+  "summary": { "employees": 230, "inputs_sent": 410, "inputs_zeroed": 3,
+               "failures": 2,
+               "warnings": ["colaborador 21500 estava no envio global anterior e não veio neste (demitido no ciclo?): os lançamentos dele foram zerados; faça o envio individual"] },
   "errors": [
     { "external_id": "21609", "code": "0020",
       "message": "verba 0020 não existe no Workday" },

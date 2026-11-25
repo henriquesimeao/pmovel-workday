@@ -10,7 +10,8 @@ de/para de CNPJ e cursores de diff. O schema é versionado em **migrations**
 |---|---|
 | `sync_run` | Uma execução (lote) de sincronização: fase, tipo, trigger, status, contadores (total/sucesso/falha/skip), início/fim e erro global. |
 | `sync_item` | Resultado de cada registro dentro de uma run: `external_id`, operação (create/update/inactivate/reactivate/none), status (success/failure/skipped), mensagem de erro e resumo do payload. FK para `sync_run` (ON DELETE CASCADE). |
-| `cnpj_mapping` | De/para manual legal entity (Workday) ↔ CNPJ (Pmovel). Populado pela operação. |
+| `cnpj_mapping` | De/para manual legal entity (Workday) ↔ CNPJ (Pmovel), com a moeda da empresa (`currency`, Fase 2). Versionado no seed. |
+| `payroll_input_sent` | Fase 2: registro de cada lançamento gravado no Workday (ciclo + colaborador + verba), com o id e o WID do Workday. Ver `docs/fase-2-verbas.md`. |
 | `sync_cursor` | Cursor por job (ex.: `employees:full`): data da última execução bem-sucedida, para buscar apenas o que mudou (diffs). |
 
 ## Configuração
@@ -52,7 +53,7 @@ A migration inicial (`InitialSchema`) cria as quatro tabelas no dialeto MySQL.
 ## Operação
 
 **Estado em dev:** database `integration_workday` em `127.0.0.1`, migration
-`InitialSchema` aplicada, 4 registros em `cnpj_mapping`, runs 1 a 12 em `sync_run`.
+migrations `InitialSchema` e `PayrollExport` aplicadas, 4 registros em `cnpj_mapping` (com moeda), runs 1 a 15 em `sync_run`.
 
 **De/para de CNPJ (`cnpj_mapping`)**: versionado por ambiente em
 `seeds/cnpj-mapping/<ambiente>.json` e aplicado com o seed:
