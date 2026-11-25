@@ -16,6 +16,8 @@ fundação: `SyncOrchestrator`, `PhaseSyncJob`, `JobRegistry`, os clientes
 
 ## Fase 2 — Horas extras e verbas de folha (Pmovel → Workday)
 
+> Planejamento detalhado em [fase-2-planejamento.md](fase-2-planejamento.md).
+
 **Direção:** Pmovel é a origem, alimenta o Workday.
 
 - **Origem (Pmovel):** `POST /v3/reports/event_totals` (`EventTotalsDto`), que

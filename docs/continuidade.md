@@ -275,9 +275,10 @@ diferentes.
 3. **Preparar homologação/produção**: seguir `docs/workday-novo-cliente.md` no tenant
    do cliente, definir o de/para de CNPJ real e os valores de grupo/sindicato/jornada
    (pendências 7 e 9), e proteger os endpoints (pendência 11).
-4. **Fase 2** (Pmovel → Workday: horas extras e verbas): origem
-   `POST /v3/reports/event_totals`; falta descobrir o destino de escrita no Workday e
-   liberar permissões de escrita. Ver `docs/roadmap-fases.md`. A fundação
+4. **Fase 2** (Pmovel → Workday: horas extras e verbas): planejamento em
+   `docs/fase-2-planejamento.md` (decisões P2 a P8 tomadas; P1 em aberto: a folha
+   roda no Workday Payroll?). Rotas novas da API Pmovel especificadas em
+   `docs/fase-2-api-pmovel.md`. A fundação
    (`PhaseSyncJob`, `JobRegistry`, clientes, persistência) já suporta uma nova fase.
 
 ## 10. Mapa do código
@@ -335,5 +336,7 @@ SELECT legalEntityId, legalEntityName, cnpj, active FROM cnpj_mapping;
 | `docs/de-para-workday-pmovel.md` | cada campo do Pmovel, de onde vem, regras de `cpf` e e-mail |
 | `docs/banco-de-dados.md` | tabelas, migrations e operação do MySQL |
 | `docs/workday-novo-cliente.md` | configurar um tenant Workday do zero (ISU, grupo, domínios, WQL, API Client) |
+| `docs/fase-2-planejamento.md` | Fase 2: origem, destino, decisões, arquitetura e etapas |
+| `docs/fase-2-api-pmovel.md` | Fase 2: especificação das rotas novas da API Pmovel (`payroll_exports`) |
 | `docs/roadmap-fases.md` | Fases 2, 3 e 4 |
 | `docs/referencia-workday-rest.md` | código JS original e histórico da prova de conceito |
