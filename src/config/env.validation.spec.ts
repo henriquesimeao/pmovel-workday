@@ -78,4 +78,48 @@ describe('envValidationSchema', () => {
 
     expect(error).toBeUndefined();
   });
+
+  describe('Fase 2: envio de verbas', () => {
+    it('desligado por padrão, sem exigir destino', () => {
+      const { error, value } = envValidationSchema.validate(validEnv);
+      expect(error).toBeUndefined();
+      expect(value.PAYROLL_EXPORT_ENABLED).toBe(false);
+      expect(value.PAYROLL_EXPORT_POLL_SECONDS).toBe(60);
+    });
+
+    it('ligado sem destino: recusa subir', () => {
+      const { error } = envValidationSchema.validate({
+        ...validEnv,
+        PAYROLL_EXPORT_ENABLED: 'true',
+      });
+      expect(error?.message).toContain('PAYROLL_EXPORT_DESTINATION');
+    });
+
+    it.each(['payroll_input', 'external_payroll_input'])(
+      'aceita o destino %s',
+      (destination) => {
+        const { error } = envValidationSchema.validate({
+          ...validEnv,
+          PAYROLL_EXPORT_ENABLED: 'true',
+          PAYROLL_EXPORT_DESTINATION: destination,
+        });
+        expect(error).toBeUndefined();
+      },
+    );
+
+    it('recusa destino desconhecido e intervalo menor que 10s', () => {
+      expect(
+        envValidationSchema.validate({
+          ...validEnv,
+          PAYROLL_EXPORT_DESTINATION: 'time_tracking',
+        }).error,
+      ).toBeDefined();
+      expect(
+        envValidationSchema.validate({
+          ...validEnv,
+          PAYROLL_EXPORT_POLL_SECONDS: '5',
+        }).error,
+      ).toBeDefined();
+    });
+  });
 });

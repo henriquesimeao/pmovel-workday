@@ -34,6 +34,16 @@ export interface SyncConfig {
   scheduleEnabled: boolean;
 }
 
+/** Destino das verbas no Workday (Fase 2). */
+export type PayrollExportDestination =
+  'payroll_input' | 'external_payroll_input';
+
+export interface PayrollExportConfig {
+  enabled: boolean;
+  pollSeconds: number;
+  destination: PayrollExportDestination | undefined;
+}
+
 /**
  * Fachada tipada sobre o ConfigService.
  *
@@ -87,6 +97,16 @@ export class AppConfigService {
     return {
       cron: this.config.get<string>('SYNC_CRON', '0 * * * *'),
       scheduleEnabled: this.config.get<boolean>('SYNC_SCHEDULE_ENABLED', false),
+    };
+  }
+
+  get payrollExport(): PayrollExportConfig {
+    return {
+      enabled: this.config.get<boolean>('PAYROLL_EXPORT_ENABLED', false),
+      pollSeconds: this.config.get<number>('PAYROLL_EXPORT_POLL_SECONDS', 60),
+      destination: this.config.get<PayrollExportDestination>(
+        'PAYROLL_EXPORT_DESTINATION',
+      ),
     };
   }
 

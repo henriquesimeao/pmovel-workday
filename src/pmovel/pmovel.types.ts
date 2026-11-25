@@ -102,3 +102,93 @@ export interface ListEmployeesParams {
   page?: number;
   include_inactive?: boolean;
 }
+
+// --- Fase 2: solicitações de envio de verbas (payroll_exports) ---
+// Contrato em docs/fase-2-api-pmovel.md (rotas novas, a construir no Pmovel).
+
+export type PayrollExportStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'completed_with_errors'
+  | 'failed'
+  | 'canceled';
+
+export type PayrollExportScope = 'global' | 'individual';
+
+/** Ciclo do Pmovel, como vem nas rotas de `payroll_exports`. */
+export interface PayrollExportCycle {
+  id: number;
+  year?: string;
+  month?: string;
+  start_date: string;
+  end_date: string;
+  closed: boolean;
+  closed_at?: string | null;
+}
+
+/** Uma solicitação de envio (`GET /v3/payroll_exports/{id}`). */
+export interface PayrollExport {
+  id: number;
+  cnpj: string;
+  cycle: PayrollExportCycle;
+  scope: PayrollExportScope;
+  /** Só no `individual`. */
+  external_id: string | null;
+  target: string;
+  status: PayrollExportStatus;
+  requested_at?: string;
+}
+
+/** Total de uma verba de um colaborador no ciclo. */
+export interface PayrollExportTotalsEvent {
+  /** `ehevents.e_code`, igual ao código da verba no Workday. */
+  code: string;
+  name: string;
+  /** `P` provento (earning), `D` desconto (deduction). */
+  type: 'P' | 'D';
+  total_seconds: number;
+  hours_decimal: number;
+  hours: string;
+}
+
+export interface PayrollExportTotalsEmployee {
+  /** Id interno do Pmovel (`users.id`). */
+  employee_id: number;
+  external_id: string;
+  matricula: string;
+  name: string;
+  active: boolean;
+  dt_demissao: string | null;
+  events: PayrollExportTotalsEvent[];
+}
+
+/** Uma página de `GET /v3/payroll_exports/{id}/totals`. */
+export interface PayrollExportTotalsPage {
+  export_id: number;
+  scope: PayrollExportScope;
+  cnpj: string;
+  cycle: PayrollExportCycle;
+  page: number;
+  limit: number;
+  total_employees: number;
+  employees: PayrollExportTotalsEmployee[];
+}
+
+/** Corpo de `POST /v3/payroll_exports/{id}/finish`. */
+export interface PayrollExportFinishDto {
+  status: 'completed' | 'completed_with_errors' | 'failed';
+  summary: {
+    employees: number;
+    inputs_sent: number;
+    inputs_zeroed: number;
+    failures: number;
+    warnings: string[];
+  } | null;
+  errors: Array<{
+    external_id: string | null;
+    code: string | null;
+    message: string;
+  }>;
+  error_message: string | null;
+}

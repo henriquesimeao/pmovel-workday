@@ -10,6 +10,10 @@ import {
   EmployeeResponse,
   LoginOkResponseDto,
   ListEmployeesParams,
+  PayrollExport,
+  PayrollExportFinishDto,
+  PayrollExportStatus,
+  PayrollExportTotalsPage,
 } from './pmovel.types';
 
 /**
@@ -173,5 +177,53 @@ export class PmovelClient extends BaseRestClient {
       }
       throw e;
     }
+  }
+
+  // --- Fase 2: solicitações de envio de verbas (payroll_exports) ---
+
+  /**
+   * GET /v3/payroll_exports, filtrado por status e destino. A lista vazia vem
+   * como `200 []` (contrato da Fase 2); um 404 é tratado como erro, porque
+   * indica rota inexistente (ex.: API do Pmovel sem as rotas novas).
+   */
+  async listPayrollExports(
+    status: PayrollExportStatus,
+    target = 'workday',
+  ): Promise<PayrollExport[]> {
+    const res = await this.get<PayrollExport[] | { data?: PayrollExport[] }>(
+      '/v3/payroll_exports',
+      { status, target, limit: 100 },
+    );
+    return Array.isArray(res) ? res : (res?.data ?? []);
+  }
+
+  /**
+   * POST /v3/payroll_exports/{id}/start: assume a solicitação (`pending` →
+   * `processing`). Devolve `null` se outro processo já assumiu (409).
+   */
+  async startPayrollExport(id: number): Promise<PayrollExport | null> {
+    try {
+      return await this.post<PayrollExport>(`/v3/payroll_exports/${id}/start`);
+    } catch (e) {
+      if (e instanceof RestClientError && e.status === 409) return null;
+      throw e;
+    }
+  }
+
+  /** GET /v3/payroll_exports/{id}/totals, uma página (por colaborador). */
+  getPayrollExportTotals(
+    id: number,
+    page: number,
+    limit = 100,
+  ): Promise<PayrollExportTotalsPage> {
+    return this.get<PayrollExportTotalsPage>(
+      `/v3/payroll_exports/${id}/totals`,
+      { page, limit, detail: 'total' },
+    );
+  }
+
+  /** POST /v3/payroll_exports/{id}/finish: devolve o resultado ao Pmovel. */
+  finishPayrollExport(id: number, dto: PayrollExportFinishDto): Promise<void> {
+    return this.post<void>(`/v3/payroll_exports/${id}/finish`, dto);
   }
 }

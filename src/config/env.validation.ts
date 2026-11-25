@@ -43,6 +43,21 @@ export const envValidationSchema = Joi.object({
   SYNC_CRON: Joi.string().default('0 * * * *'),
   // Liga/desliga o disparo agendado sem mexer em código.
   SYNC_SCHEDULE_ENABLED: Joi.boolean().default(false),
+
+  // --- Fase 2: envio de verbas do ciclo (Pmovel → Workday) ---
+  // Liga a consulta periódica das solicitações de envio no Pmovel.
+  PAYROLL_EXPORT_ENABLED: Joi.boolean().default(false),
+  // Intervalo da consulta, em segundos.
+  PAYROLL_EXPORT_POLL_SECONDS: Joi.number().integer().min(10).default(60),
+  // Onde as horas entram no Workday: Workday Payroll ou folha de terceiro
+  // (Payroll Interface). Obrigatório quando o envio está ligado.
+  PAYROLL_EXPORT_DESTINATION: Joi.string()
+    .valid('payroll_input', 'external_payroll_input')
+    .when('PAYROLL_EXPORT_ENABLED', {
+      is: true,
+      then: Joi.required(),
+      otherwise: Joi.optional(),
+    }),
 })
   // Variáveis extras do .env de referência (ex.: WorkdayUser) são toleradas.
   .unknown(true);

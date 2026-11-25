@@ -224,4 +224,70 @@ describe('PmovelClient', () => {
       status: 401,
     });
   });
+
+  describe('Fase 2: payroll_exports', () => {
+    const login = () =>
+      fetchMock.mockResolvedValueOnce(
+        mockResponse(200, {
+          access_token: fakeJwt(Math.floor(Date.now() / 1000) + 3600),
+        }),
+      );
+
+    it('lista por status e destino; 404 é erro (rota inexistente)', async () => {
+      login();
+      fetchMock.mockResolvedValueOnce(mockResponse(200, [{ id: 1 }]));
+      const client = new PmovelClient(makeConfig());
+      await expect(client.listPayrollExports('pending')).resolves.toEqual([
+        { id: 1 },
+      ]);
+      const url = new URL(fetchMock.mock.calls[1][0] as string);
+      expect(url.pathname).toBe('/v3/payroll_exports');
+      expect(url.searchParams.get('status')).toBe('pending');
+      expect(url.searchParams.get('target')).toBe('workday');
+
+      fetchMock.mockResolvedValueOnce(
+        mockResponse(404, { message: 'Cannot GET /v3/payroll_exports' }),
+      );
+      await expect(client.listPayrollExports('pending')).rejects.toMatchObject({
+        status: 404,
+      });
+    });
+
+    it('start: 409 (outro processo assumiu) devolve null', async () => {
+      login();
+      fetchMock.mockResolvedValueOnce(mockResponse(409, { message: ['x'] }));
+      const client = new PmovelClient(makeConfig());
+      await expect(client.startPayrollExport(5)).resolves.toBeNull();
+      expect(fetchMock.mock.calls[1][0]).toBe(
+        'https://tools.pmovel.com.br/v3/payroll_exports/5/start',
+      );
+      expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe('POST');
+    });
+
+    it('totals pagina por colaborador e finish envia o resultado', async () => {
+      login();
+      fetchMock
+        .mockResolvedValueOnce(mockResponse(200, { employees: [] }))
+        .mockResolvedValueOnce(mockResponse(200, ''));
+      const client = new PmovelClient(makeConfig());
+      await client.getPayrollExportTotals(5, 2);
+      const url = new URL(fetchMock.mock.calls[1][0] as string);
+      expect(url.pathname).toBe('/v3/payroll_exports/5/totals');
+      expect(url.searchParams.get('page')).toBe('2');
+      expect(url.searchParams.get('limit')).toBe('100');
+
+      await client.finishPayrollExport(5, {
+        status: 'completed',
+        summary: null,
+        errors: [],
+        error_message: null,
+      });
+      expect(fetchMock.mock.calls[2][0]).toBe(
+        'https://tools.pmovel.com.br/v3/payroll_exports/5/finish',
+      );
+      expect(
+        JSON.parse(String((fetchMock.mock.calls[2][1] as RequestInit).body)),
+      ).toMatchObject({ status: 'completed' });
+    });
+  });
 });
