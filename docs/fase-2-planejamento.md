@@ -88,6 +88,7 @@ não o Workday. **Esta é a primeira pergunta a responder (P1).**
 | W2 | Código da verba no Workday | **Igual ao `e_code` do Pmovel** (reference ID do pay component, ou do código de horas no Time Tracking) |
 | W3 | O integrador pode apagar no Workday? | **Não se sabe; as duas possibilidades são suportadas.** Modo `replace` (apaga e grava de novo) e modo `delta` (lança só a diferença). Ver seção 5 |
 | P9 | Reenvio quando o Workday recusa apagar (folha do período já processada) | **O item falha com a mensagem do Workday; o RH faz o ajuste no Workday e reenvia** |
+| P10 | Moeda (obrigatória no Payroll Interface, mesmo para horas) | **Por empresa, coluna `currency` em `cnpj_mapping`**, versionada no seed |
 
 ## 5. Arquitetura
 
@@ -107,7 +108,7 @@ do Pmovel. O integrador não precisa ficar exposto na internet. Detalhes em
 |---|---|---|
 | `PAYROLL_EXPORT_ENABLED` | `true` / `false` | liga a consulta de solicitações |
 | `PAYROLL_EXPORT_POLL_SECONDS` | número | intervalo da consulta |
-| `PAYROLL_EXPORT_DESTINATION` | `payroll_input` / `time_tracking` | onde as horas entram no Workday (W1) |
+| `PAYROLL_EXPORT_DESTINATION` | `payroll_input` / `external_payroll_input` / `time_tracking` | onde as horas entram no Workday (W1) |
 | `PAYROLL_EXPORT_RESEND_MODE` | `replace` / `delta` | como corrigir um envio anterior (W3) |
 
 **Destinos (W1).** Os dois recebem a mesma entrada (colaborador, código da verba,
@@ -117,6 +118,7 @@ não muda conforme o destino.
 | Destino | Como grava | Granularidade |
 |---|---|---|
 | `payroll_input` | `POST payroll/v2/{tenant}/payrollInputs`: horas no pay component com o código da verba, datas do ciclo | **total do ciclo** por colaborador e verba |
+| `external_payroll_input` | SOAP `Put_External_Payroll_Input` (serviço **Payroll_Interface**): lançamento para **folha de terceiro**. O Workday guarda e repassa ao provedor de folha pelo Payroll Interface | **total do ciclo** por colaborador e verba. Uma linha da mesma verba **não pode sobrepor datas** de outra; o reenvio atualiza a linha existente pela referência (a confirmar em E1) |
 | `time_tracking` | horas reportadas num código de horas do Time Tracking, com o código da verba. **API a descobrir** (os caminhos REST testados responderam 404; pode ser SOAP) | **por dia**: o Time Tracking registra horas em datas. Exige da API Pmovel os totais por dia (`detail=daily` na rota de totais). Ver o risco na seção 8 |
 
 **Modos de reenvio (W3).** O registro de envio guarda cada lançamento feito e o id
@@ -163,6 +165,7 @@ lançamento:
 |---|---|
 | `PmovelClient`: rotas de `payroll_exports` | listar, assumir, ler totais, devolver resultado |
 | Interface de destino + `PayrollInputWriter` e `TimeTrackingWriter` | gravar e apagar lançamentos; achar a verba pelo código |
+| Coluna **`currency`** em `cnpj_mapping` (migration + seed) | moeda do lançamento (P10) |
 | Tabela **`payroll_input_sent`** (migration) | registro de envio: solicitação, ciclo, escopo, CNPJ, `employee_id` e `external_id`, código da verba, data (no `time_tracking`), segundos, id do lançamento no Workday, run. **É o que permite corrigir um envio anterior** nos dois modos: no Workday, lançar de novo soma |
 | Consulta periódica das solicitações | `PAYROLL_EXPORT_POLL_SECONDS`, ligada por `PAYROLL_EXPORT_ENABLED` |
 | Parâmetro de execução no orquestrador | hoje o job não recebe parâmetros; aqui ele recebe a solicitação |
@@ -170,13 +173,69 @@ lançamento:
 **Reaproveitado da Fase 1:** orquestrador (lote, falha por item, lock por job,
 recuperação de run presa), `BaseRestClient`, `sync_run`/`sync_item`.
 
+**Tenant de dev (verificado em 25/11).** O tenant tem só **Payroll Interface**
+(folha de terceiro), sem Workday Payroll: a REST `payroll/v2/payrollInputs`
+responde 403, e o destino para este tenant é `external_payroll_input`.
+
+Permissões liberadas ao grupo `ISSG_Pmovel`, na seção **Integration
+Permissions** do domínio (a permissão de tela, View/Modify, não vale para web
+service):
+- **Worker Data: Payroll Interface (Payroll Input by Worker)**: Get e Put
+  (lançamentos);
+- **Payroll Interface**: Get (verbas, descontos, grupos de folha externos).
+
+Os outros domínios que protegem essas operações, *Implementation* e *Special OX
+Web Services*, dão acesso administrativo amplo e não foram liberados.
+
+**Configuração de teste criada no tenant de dev (pela tela).** O Payroll Interface
+estava vazio. Foram criados: calendário de períodos mensal, grupo de folha
+externo `PMV Teste` (`PAY_GROUP-17-25`, **Canadá**: o Workday não permite grupo de
+Payroll Interface para os EUA, porque a folha dos EUA deste tenant é do Workday
+Payroll), o colaborador **21079** no grupo e a verba **`PMV_TESTE_HE`** (tipos de
+entrada `INPUT`, `ADJ`, `GOAL`).
+
+**Envio real validado (25/11)**, colaborador 21079, verba `PMV_TESTE_HE`, ciclo
+15/05 a 14/06/2026, `Payroll_Input_ID = PMV-TESTE-21079-PMV_TESTE_HE`:
+
+| Passo | Resultado |
+|---|---|
+| sem moeda | **recusado**: `Currency_Reference is required` |
+| 1,5 h, moeda CAD | criado (1 lançamento) |
+| mesmo id, 2 h | **atualizado no lugar** (mesmo WID, continua 1 lançamento) |
+| mesmo id, 0 h | aceito; o lançamento fica com 0 h (estado final do teste) |
+
+Não há operação SOAP para apagar lançamento no `Payroll_Interface`. O reenvio
+corrige pelo `Payroll_Input_ID`, e verba que deixar de existir é **zerada**. Testado sem gravar:
+`Get_External_Payroll_Inputs` responde (0 lançamentos) e um `Put` com dados
+inexistentes chega à validação dos dados.
+
+Contrato do `Put_External_Payroll_Input` (SOAP, `Payroll_Interface`, v45.0),
+confirmado no tenant e na
+[documentação da operação](https://community.workday.com/sites/default/files/file-hosting/productionapi/Payroll_Interface/v33.0/Put_External_Payroll_Input.html):
+
+| Campo | Uso na integração |
+|---|---|
+| `Payroll_Input_ID` | **id definido pelo integrador**. Se já existir, o Workday atualiza; senão, cria. Reenvio idempotente sem apagar: `PMV-<ciclo>-<employee_id>-<verba>` |
+| `Payee_Reference`, tipo `Employee_ID` | o `external_id` direto, **sem consultar o WID** |
+| `Pay_Component_Workday_Reference`, tipo `Earning_Code` ou `Deduction_Code` | o `e_code` direto. O tipo vem do `e_type` do Pmovel: `P` (provento) → `Earning_Code`, `D` (desconto) → `Deduction_Code` |
+| `Batch_ID` | um lote por solicitação, para o RH achar e, se preciso, apagar pela tela (*Delete Payroll Input by Batch ID*) |
+| `Start_Date`, `End_Date` | início e fim do ciclo |
+| `Unit` (+ `Unit_Type_Reference`) | horas decimais |
+| `Currency_Reference` | **obrigatório, inclusive para horas** (confirmado no envio real). A mesma operação serve para valores em dinheiro, e o Workday exige a moeda sempre. Para horas, ela não muda nada. **Decisão: moeda por empresa, numa coluna nova `currency` em `cnpj_mapping`** (e no seed `seeds/cnpj-mapping/<ambiente>.json`). Dev: NLE USA e ASI → USD, NLE CAN → CAD, NLE UK → GBP |
+
+Regras do Workday: não pode haver duas linhas não-ajuste da mesma verba com datas
+sobrepostas, nem duas com a mesma verba e as mesmas datas. Com o `Payroll_Input_ID`
+fixo por ciclo, colaborador e verba, o reenvio atualiza a linha e não esbarra
+nessas regras (confirmado).
+
 **A descobrir no Workday (E1):**
 - como achar o pay component pelo código (a REST de Payroll Input referencia o
   pay component pelo id interno);
 - se o Payroll Input aceita **valor negativo** (modo `delta`);
 - se o usuário da integração consegue **apagar** o que lançou (modo `replace`);
 - a API de horas reportadas do **Time Tracking** e se ela aceita registro por dia
-  com código de horas.
+  com código de horas;
+- no `external_payroll_input`: **resolvido** (ver o envio real validado acima).
 
 ## 6. Pré-requisitos
 
