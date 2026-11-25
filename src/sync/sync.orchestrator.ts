@@ -10,7 +10,7 @@ import {
   SyncItemStatus,
   SyncOperation,
 } from '../persistence/entities/sync-item.entity';
-import { PhaseSyncJob } from './phase-sync-job';
+import { JobRunContext, PhaseSyncJob } from './phase-sync-job';
 import { ManualReviewError } from './manual-review.error';
 
 /** Erro quando já há uma execução do mesmo job em andamento. */
@@ -20,6 +20,9 @@ export class SyncAlreadyRunningError extends Error {
     this.name = 'SyncAlreadyRunningError';
   }
 }
+
+/** Origem do disparo de uma run: HTTP, agendador ou solicitação vinda do Pmovel. */
+export type SyncTrigger = 'manual' | 'scheduled' | 'pmovel';
 
 /** Mensagem gravada nas runs que estavam RUNNING quando a aplicação subiu. */
 export const INTERRUPTED_RUN_MESSAGE =
@@ -91,10 +94,11 @@ export class SyncOrchestrator
    */
   async run(
     job: PhaseSyncJob,
-    trigger: 'manual' | 'scheduled',
+    trigger: SyncTrigger,
+    params?: unknown,
   ): Promise<number> {
     const runId = await this.start(job, trigger);
-    await this.track(this.execute(job, runId));
+    await this.track(this.execute(job, { runId, params }));
     return runId;
   }
 
@@ -104,17 +108,18 @@ export class SyncOrchestrator
    */
   async launch(
     job: PhaseSyncJob,
-    trigger: 'manual' | 'scheduled',
+    trigger: SyncTrigger,
+    params?: unknown,
   ): Promise<number> {
     const runId = await this.start(job, trigger);
-    void this.track(this.execute(job, runId));
+    void this.track(this.execute(job, { runId, params }));
     return runId;
   }
 
   /** Verifica o lock e abre a run. Lança SyncAlreadyRunningError. */
   private async start(
     job: PhaseSyncJob,
-    trigger: 'manual' | 'scheduled',
+    trigger: SyncTrigger,
   ): Promise<number> {
     const lockKey = SyncOrchestrator.lockKey(job);
     if (this.activeJobs.has(lockKey)) {
@@ -142,9 +147,13 @@ export class SyncOrchestrator
    * Processa a run aberta por `start`. Nunca rejeita: qualquer erro fecha a run
    * como FAILED, e o lock em memória é sempre liberado.
    */
-  private async execute(job: PhaseSyncJob, runId: number): Promise<void> {
+  private async execute(
+    job: PhaseSyncJob,
+    context: JobRunContext,
+  ): Promise<void> {
+    const { runId } = context;
     try {
-      await this.process(job, runId);
+      await this.process(job, context);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       this.logger.error(`[run ${runId}] interrompida por erro: ${message}`);
@@ -165,13 +174,17 @@ export class SyncOrchestrator
   }
 
   /** Corpo do lote. Pode lançar; quem trata é `execute`. */
-  private async process(job: PhaseSyncJob, runId: number): Promise<void> {
+  private async process(
+    job: PhaseSyncJob,
+    context: JobRunContext,
+  ): Promise<void> {
+    const { runId } = context;
     const startedAt = new Date();
 
     let items;
     try {
       const since = await this.cursors.getLastRunAt(job.key);
-      items = await job.fetchItems(since);
+      items = await job.fetchItems(since, context);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       this.logger.error(`[run ${runId}] falha ao buscar origem: ${message}`);
@@ -185,7 +198,7 @@ export class SyncOrchestrator
 
     for (const item of items) {
       try {
-        const result = await job.processItem(item);
+        const result = await job.processItem(item, context);
         await this.runs.recordItem(runId, {
           externalId: item.externalId,
           operation: result.operation,

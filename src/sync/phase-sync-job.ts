@@ -22,6 +22,16 @@ export interface SyncItemInput<T = unknown> {
 }
 
 /**
+ * Contexto de uma execução, entregue pelo orquestrador ao job: o id da run e os
+ * parâmetros do disparo (ex.: na Fase 2, a solicitação de envio do Pmovel).
+ * Jobs que não precisam podem ignorar.
+ */
+export interface JobRunContext<P = unknown> {
+  runId: number;
+  params?: P;
+}
+
+/**
  * Contrato de um job de fase. O SyncOrchestrator cuida do lote, da política de
  * falhas, do cursor e do registro; o job implementa apenas a lógica específica:
  *
@@ -36,6 +46,12 @@ export interface PhaseSyncJob<T = unknown> {
   readonly phase: string;
   readonly type: string;
 
-  fetchItems(since: Date | null): Promise<SyncItemInput<T>[]>;
-  processItem(item: SyncItemInput<T>): Promise<ItemResult>;
+  fetchItems(
+    since: Date | null,
+    context?: JobRunContext,
+  ): Promise<SyncItemInput<T>[]>;
+  processItem(
+    item: SyncItemInput<T>,
+    context?: JobRunContext,
+  ): Promise<ItemResult>;
 }
