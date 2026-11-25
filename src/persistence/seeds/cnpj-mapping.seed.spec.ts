@@ -37,7 +37,7 @@ describe('seed do de/para de CNPJ', () => {
       const [entry] = parseCnpjMappingSeed([
         { ...usa, cnpj: '00.111.111/0001-00' },
       ]);
-      expect(entry).toEqual({ ...usa, active: true });
+      expect(entry).toEqual({ ...usa, active: true, currency: null });
     });
 
     it('aceita empresa sem legalEntityId (chave pelo nome)', () => {
@@ -67,6 +67,15 @@ describe('seed do de/para de CNPJ', () => {
         'item 2: active deve ser true ou false',
         'item 3: empresa repetida no arquivo (NLE USA)',
       ]);
+    });
+
+    it('aceita a moeda (maiúscula) e recusa formato inválido', () => {
+      expect(
+        parseCnpjMappingSeed([{ ...usa, currency: 'usd' }])[0].currency,
+      ).toBe('USD');
+      expect(() => parseCnpjMappingSeed([{ ...usa, currency: 'US' }])).toThrow(
+        /currency deve ter 3 letras/,
+      );
     });
 
     it('recusa arquivo que não é uma lista', () => {
@@ -113,6 +122,16 @@ describe('seed do de/para de CNPJ', () => {
       expect(result.updated[0]).toContain('antes:');
       expect(await repo.findAll()).toHaveLength(1);
       expect(await repo.resolveCnpj('NLE USA', null)).toBe('99999999000199');
+    });
+
+    it('atualiza a moeda e informa a mudança', async () => {
+      await applyCnpjMappingSeed(repo, parseCnpjMappingSeed([usa]));
+      const result = await applyCnpjMappingSeed(
+        repo,
+        parseCnpjMappingSeed([{ ...usa, currency: 'USD' }]),
+      );
+      expect(result.updated).toHaveLength(1);
+      expect((await repo.findActiveByCnpj(usa.cnpj))!.currency).toBe('USD');
     });
 
     it('active = false desativa o de/para', async () => {

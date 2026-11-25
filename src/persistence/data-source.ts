@@ -1,6 +1,12 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
-import { SyncRun, SyncItem, CnpjMapping, SyncCursor } from './entities';
+import {
+  SyncRun,
+  SyncItem,
+  CnpjMapping,
+  SyncCursor,
+  PayrollInputSent,
+} from './entities';
 
 /**
  * DataSource do TypeORM para o CLI de migrations (`npm run migration:*`).
@@ -15,7 +21,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  entities: [SyncRun, SyncItem, CnpjMapping, SyncCursor],
+  entities: [SyncRun, SyncItem, CnpjMapping, SyncCursor, PayrollInputSent],
   migrations: ['src/persistence/migrations/*.ts'],
   synchronize: false,
   logging: false,

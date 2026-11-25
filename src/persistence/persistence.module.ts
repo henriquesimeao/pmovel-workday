@@ -2,16 +2,24 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppConfigModule } from '../config/config.module';
 import { AppConfigService } from '../config/app-config.service';
-import { SyncRun, SyncItem, CnpjMapping, SyncCursor } from './entities';
+import {
+  SyncRun,
+  SyncItem,
+  CnpjMapping,
+  SyncCursor,
+  PayrollInputSent,
+} from './entities';
 import { SyncRunRepository } from './sync-run.repository';
 import { SyncCursorRepository } from './sync-cursor.repository';
 import { CnpjMappingRepository } from './cnpj-mapping.repository';
+import { PayrollInputSentRepository } from './payroll-input-sent.repository';
 
-const ENTITIES = [SyncRun, SyncItem, CnpjMapping, SyncCursor];
+const ENTITIES = [SyncRun, SyncItem, CnpjMapping, SyncCursor, PayrollInputSent];
 const REPOSITORIES = [
   SyncRunRepository,
   SyncCursorRepository,
   CnpjMappingRepository,
+  PayrollInputSentRepository,
 ];
 
 /**

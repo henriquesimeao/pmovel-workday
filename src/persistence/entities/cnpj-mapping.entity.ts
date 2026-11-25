@@ -32,6 +32,14 @@ export class CnpjMapping {
   @Column({ length: 32 })
   cnpj!: string;
 
+  /**
+   * Moeda da empresa (ISO 4217, ex.: `BRL`, `USD`), usada nos lançamentos de
+   * verbas da Fase 2. O Payroll Interface do Workday exige a moeda mesmo para
+   * horas. `null` quando não configurada.
+   */
+  @Column({ type: 'varchar', length: 3, nullable: true })
+  currency!: string | null;
+
   @Column({ type: 'boolean', default: true })
   active!: boolean;
 

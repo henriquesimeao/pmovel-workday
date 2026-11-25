@@ -9,6 +9,8 @@ export interface CnpjMappingSeedEntry {
   /** CNPJ do cliente no Pmovel: 14 letras/números (aceita máscara). */
   cnpj: string;
   active: boolean;
+  /** Moeda ISO 4217 (ex.: `BRL`), usada nos lançamentos da Fase 2. */
+  currency: string | null;
 }
 
 export interface CnpjMappingSeedResult {
@@ -81,11 +83,23 @@ export function parseCnpjMappingSeed(data: unknown): CnpjMappingSeedEntry[] {
       problems.push(`${where}: active deve ser true ou false`);
     }
 
+    let currency: string | null = null;
+    if (r.currency !== undefined && r.currency !== null) {
+      currency =
+        typeof r.currency === 'string' ? r.currency.trim().toUpperCase() : '';
+      if (!/^[A-Z]{3}$/.test(currency)) {
+        problems.push(
+          `${where} (${name || '?'}): currency deve ter 3 letras, ISO 4217 (recebido: ${JSON.stringify(r.currency)})`,
+        );
+      }
+    }
+
     const entry: CnpjMappingSeedEntry = {
       legalEntityId,
       legalEntityName: name,
       cnpj,
       active: r.active === undefined ? true : r.active === true,
+      currency,
     };
     const key = keyOf(entry);
     if (name && seen.has(key)) {
@@ -118,7 +132,7 @@ export async function applyCnpjMappingSeed(
   };
 
   for (const entry of entries) {
-    const label = `${entry.legalEntityName} → ${entry.cnpj}`;
+    const label = `${entry.legalEntityName} → ${entry.cnpj}${entry.currency ? ` ${entry.currency}` : ''}`;
     const existing = await repo.findByKey(
       entry.legalEntityId,
       entry.legalEntityName,
@@ -128,10 +142,11 @@ export async function applyCnpjMappingSeed(
     } else if (
       existing.legalEntityName !== entry.legalEntityName ||
       existing.cnpj !== entry.cnpj ||
-      existing.active !== entry.active
+      existing.active !== entry.active ||
+      (existing.currency ?? null) !== entry.currency
     ) {
       result.updated.push(
-        `${label} (antes: ${existing.legalEntityName} → ${existing.cnpj}${existing.active ? '' : ', inativo'})`,
+        `${label} (antes: ${existing.legalEntityName} → ${existing.cnpj}${existing.currency ? ` ${existing.currency}` : ''}${existing.active ? '' : ', inativo'})`,
       );
     } else {
       result.unchanged.push(label);

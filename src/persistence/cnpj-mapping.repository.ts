@@ -23,6 +23,7 @@ export class CnpjMappingRepository {
     legalEntityName: string;
     cnpj: string;
     active?: boolean;
+    currency?: string | null;
   }): Promise<CnpjMapping> {
     const legalEntityId = input.legalEntityId ?? null;
     const existing = await this.findByKey(legalEntityId, input.legalEntityName);
@@ -33,6 +34,10 @@ export class CnpjMappingRepository {
         legalEntityName: input.legalEntityName,
         cnpj: input.cnpj,
         active: input.active ?? true,
+        currency:
+          input.currency !== undefined
+            ? input.currency
+            : (existing?.currency ?? null),
       }),
     );
   }
@@ -70,6 +75,11 @@ export class CnpjMappingRepository {
       if (byName) return byName.cnpj;
     }
     return null;
+  }
+
+  /** De/para ativo de um CNPJ (só letras e números). `null` se não houver. */
+  findActiveByCnpj(cnpj: string): Promise<CnpjMapping | null> {
+    return this.mappings.findOne({ where: { cnpj, active: true } });
   }
 
   findAll(): Promise<CnpjMapping[]> {

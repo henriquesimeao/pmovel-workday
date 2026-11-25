@@ -3,24 +3,28 @@
     "legalEntityId": "NLE USA",
     "legalEntityName": "Next Level Enterprises (USA)",
     "cnpj": "00111111000100",
-    "active": true
+    "active": true,
+    "currency": "USD"
   },
   {
     "legalEntityId": "NLE CAN",
     "legalEntityName": "Next Level Enterprises, Ltd (Canada)",
     "cnpj": "00111111000200",
-    "active": true
+    "active": true,
+    "currency": "CAD"
   },
   {
     "legalEntityId": "9dff7a681c1610034f25ea57f0a70000",
     "legalEntityName": "Next Level Enterprises, PLC (UK)",
     "cnpj": "00111111000300",
-    "active": true
+    "active": true,
+    "currency": "GBP"
   },
   {
     "legalEntityId": "ASI",
     "legalEntityName": "Advanced Solutions, Inc. (USA)",
     "cnpj": "00111111000400",
-    "active": true
+    "active": true,
+    "currency": "USD"
   }
 ]
