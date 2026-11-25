@@ -228,6 +228,39 @@ sobrepostas, nem duas com a mesma verba e as mesmas datas. Com o `Payroll_Input_
 fixo por ciclo, colaborador e verba, o reenvio atualiza a linha e não esbarra
 nessas regras (confirmado).
 
+**Destino `payroll_input` (folha no Workday Payroll), validado em 25/11.** Neste
+tenant, a folha dos EUA é do Workday Payroll. Operação SOAP **`Submit_Payroll_Input`**
+(serviço `Payroll`, v45.0); leitura com `Get_Submit_Payroll_Inputs`. A REST
+`payroll/v2/payrollInputs` continua 403 e não é usada.
+
+Permissão: domínio **Worker Data: Payroll (Payroll Input)**, área **Core Payroll**,
+Get e Put para `ISSG_Pmovel` em *Integration Permissions*, e escopo **Core Payroll**
+no API Client (com refresh token novo).
+
+| Campo | Uso |
+|---|---|
+| `Payroll_Input_ID` | id definido pelo integrador; informar um existente **atualiza** |
+| `Batch_ID` | lote do envio. **O mesmo `Batch_ID` não pode ser usado em tipos de lote diferentes**: um id já usado no Payroll Interface é recusado aqui ("Batch ID is already associated with other types of Application Batches"). Usar um `Batch_ID` único por solicitação |
+| `Worker_Reference`, tipo `Employee_ID` | o `external_id` direto |
+| `Earning_Reference` / `Deduction_Reference`, tipo `Earning_Code` / `Deduction_Code` | o `e_code`, conforme o `e_type` (`P`/`D`). O código é comparado sem diferenciar maiúsculas (`Holiday` gravou como `HOLIDAY`) |
+| `Hours` | horas decimais |
+| `Start_Date`, `End_Date` | início e fim do ciclo |
+| `Currency_Reference` | **opcional** aqui (o envio sem moeda foi aceito) |
+
+Envio real, colaborador **21411** (EUA), verba existente **`HOLIDAY`**, ciclo
+15/05 a 14/06/2026, `Payroll_Input_ID = PMV-TESTE-21411-Holiday`, lote
+`PMV-TESTE-PAYROLL`:
+
+| Passo | Resultado |
+|---|---|
+| 1,5 h, sem moeda | criado |
+| mesmo id, 2 h | **atualizado no lugar** (mesmo WID) |
+| mesmo id, 0 h | aceito; o lançamento fica com 0 h (estado final do teste) |
+
+O serviço `Payroll` também não tem operação para apagar lançamento: o reenvio
+corrige pelo id e zera a verba que sumiu, igual ao Payroll Interface. Os
+lançamentos do Payroll Interface também aparecem no `Get_Submit_Payroll_Inputs`.
+
 **A descobrir no Workday (E1):**
 - como achar o pay component pelo código (a REST de Payroll Input referencia o
   pay component pelo id interno);
