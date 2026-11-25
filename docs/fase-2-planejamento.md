@@ -76,14 +76,18 @@ não o Workday. **Esta é a primeira pergunta a responder (P1).**
 
 | # | Tema | Decisão |
 |---|---|---|
-| P1 | A folha roda no Workday Payroll? | **Em aberto.** O destino é o Workday (decisão). Falta confirmar que a folha desses colaboradores é processada no Workday Payroll; se for de um provedor externo, o lançamento no Workday não chega à folha |
+| P1 | A folha roda no Workday Payroll? | **Depende do cliente: em alguns sim, em outros não. Os dados vão para o Workday em todos os casos**, independente de onde a folha é processada (ver W1) |
 | P2 | Como e quando enviar | **Uma vez por ciclo** (em geral, o mês), por **disparo manual do RH**. Todos os colaboradores, com as horas **somadas por verba** |
 | P3 | O que enviar | **Todos os eventos de `summary_register_events` com `se_id_event > 0`.** Rotas novas na API Pmovel (ver [fase-2-api-pmovel.md](fase-2-api-pmovel.md)) |
-| P4 | Ciclo e disparo | **Só ciclo fechado.** O RH dispara **dentro do sistema Pmovel** |
-| P5 | Reenvio | **Apagar no Workday tudo o que foi enviado antes para o ciclo e gravar de novo** |
+| P4 | Ciclo e disparo | **Global: só ciclo fechado. Individual: ciclo aberto ou fechado** (A1). O RH dispara **dentro do sistema Pmovel** |
+| P5 | Reenvio | **O ideal é apagar no Workday o que foi enviado antes e gravar de novo** (modo `replace`; ver W3 para quando não for possível apagar) |
 | P6 | Datas | **Início e fim do ciclo do Pmovel.** O cliente define o ciclo de acordo com a folha |
 | P7 | Demitidos na competência | **Envio individual**, disparado pelo RH. **Não entram no envio global**, para não duplicar |
 | P8 | Verba sem correspondência | **Registrar a falha no log.** O cliente mantém os códigos iguais nos dois sistemas: o **`ehevents.e_code`** do Pmovel é o código da verba (pay component) no Workday. **Não há tabela de de/para** |
+| W1 | Destino no Workday | **Configurável por integração, cobrindo todos os casos.** Cada instância do integrador atende um tenant; uma variável escolhe o destino: `payroll_input` (Payroll Input, para quem tem Workday Payroll) ou `time_tracking` (horas reportadas, para quem não tem). Ver seção 5 |
+| W2 | Código da verba no Workday | **Igual ao `e_code` do Pmovel** (reference ID do pay component, ou do código de horas no Time Tracking) |
+| W3 | O integrador pode apagar no Workday? | **Não se sabe; as duas possibilidades são suportadas.** Modo `replace` (apaga e grava de novo) e modo `delta` (lança só a diferença). Ver seção 5 |
+| P9 | Reenvio quando o Workday recusa apagar (folha do período já processada) | **O item falha com a mensagem do Workday; o RH faz o ajuste no Workday e reenvia** |
 
 ## 5. Arquitetura
 
@@ -94,54 +98,85 @@ Pmovel não fala com o Workday nem com o integrador; só responde.
 **Disparo.** O RH cria no Pmovel uma solicitação de envio (global do ciclo, ou
 individual de um demitido). O integrador consulta as solicitações pendentes a
 cada N segundos, assume uma, processa e devolve o resultado, que o RH vê na tela
-do Pmovel. O integrador não precisa ficar exposto na internet. Detalhes e
-alternativa em [fase-2-api-pmovel.md](fase-2-api-pmovel.md#1-fluxo).
+do Pmovel. O integrador não precisa ficar exposto na internet. Detalhes em
+[fase-2-api-pmovel.md](fase-2-api-pmovel.md#1-fluxo).
+
+**Configuração por integração** (uma instância por tenant Workday):
+
+| Variável | Valores | Efeito |
+|---|---|---|
+| `PAYROLL_EXPORT_ENABLED` | `true` / `false` | liga a consulta de solicitações |
+| `PAYROLL_EXPORT_POLL_SECONDS` | número | intervalo da consulta |
+| `PAYROLL_EXPORT_DESTINATION` | `payroll_input` / `time_tracking` | onde as horas entram no Workday (W1) |
+| `PAYROLL_EXPORT_RESEND_MODE` | `replace` / `delta` | como corrigir um envio anterior (W3) |
+
+**Destinos (W1).** Os dois recebem a mesma entrada (colaborador, código da verba,
+horas, início e fim do ciclo) e ficam atrás de uma mesma interface, então o job
+não muda conforme o destino.
+
+| Destino | Como grava | Granularidade |
+|---|---|---|
+| `payroll_input` | `POST payroll/v2/{tenant}/payrollInputs`: horas no pay component com o código da verba, datas do ciclo | **total do ciclo** por colaborador e verba |
+| `time_tracking` | horas reportadas num código de horas do Time Tracking, com o código da verba. **API a descobrir** (os caminhos REST testados responderam 404; pode ser SOAP) | **por dia**: o Time Tracking registra horas em datas. Exige da API Pmovel os totais por dia (`detail=daily` na rota de totais). Ver o risco na seção 8 |
+
+**Modos de reenvio (W3).** O registro de envio guarda cada lançamento feito e o id
+que o Workday devolveu.
+
+| Modo | Reenvio do mesmo ciclo | Quando usar |
+|---|---|---|
+| `replace` | apaga no Workday os lançamentos anteriores (pelos ids guardados) e grava os novos. Se o Workday recusar apagar, o item falha com a mensagem (P9) | o usuário da integração pode apagar o que ele mesmo lançou |
+| `delta` | compara com o que já foi lançado e grava **só a diferença** por colaborador e verba: positiva se aumentou, negativa se diminuiu, nada se igual. Verba que sumiu recebe o valor negativo do total anterior | o usuário da integração não pode apagar. **Requer que o Workday aceite valor negativo** (a confirmar em E1); se não aceitar, diferença negativa vira falha do item para ajuste manual |
 
 **Job `payroll-events:export`**, uma execução (`sync_run`) por solicitação:
 
 ```
 assume a solicitação (start)                         ← 409: outro já assumiu, ignora
-lê os totais (totals, paginado)
+lê os totais (totals, paginado; por dia no time_tracking)
 monta o mapa external_id → worker do Workday (WQL, workdayID)
-resolve código da verba → pay component do Workday  ← uma vez por código, em cache
-apaga no Workday o que o registro de envio tem para
-  este ciclo e este escopo                           ← P5
+resolve código da verba → objeto do Workday          ← uma vez por código, em cache
+modo replace: apaga o que o registro de envio tem para este ciclo e escopo
 para cada colaborador × verba:                       ← 1 item de sync_item
   sem worker no Workday → falha do item
-  sem pay component com esse código → falha do item  ← P8
-  POST payrollInputs (horas, início e fim do ciclo)
-  grava no registro de envio o id devolvido pelo Workday
+  sem verba com esse código no Workday → falha do item  ← P8
+  replace: grava o total
+  delta:   grava (total − já lançado), se diferente de zero
+  guarda no registro de envio o id devolvido pelo Workday
 devolve o resultado ao Pmovel (finish)
 ```
 
 **Escopos e duplicidade (P7).** O registro de envio guarda o escopo de cada
 lançamento:
-- reenviar o **global** apaga só os lançamentos globais do ciclo;
-- reenviar o **individual** apaga só os daquele colaborador no ciclo;
+- reenviar o **global** corrige só os lançamentos globais do ciclo;
+- reenviar o **individual** corrige só os daquele colaborador no ciclo. O
+  individual pode ser enviado com o ciclo **aberto** (A1) e reenviado quantas
+  vezes for preciso;
 - o integrador **recusa o individual** de quem já foi no global do mesmo ciclo
   (o caso de alguém demitido com data retroativa depois do envio global), com
   mensagem para o RH;
 - num reenvio global, se alguém que estava no envio anterior não vem mais (foi
   demitido dentro do ciclo nesse meio-tempo), o integrador avisa no resultado: os
-  lançamentos dele são apagados com o global e precisam do envio individual.
+  lançamentos dele são corrigidos com o global e precisam do envio individual.
 
 **Peças novas no integrador:**
 
 | Peça | Para quê |
 |---|---|
 | `PmovelClient`: rotas de `payroll_exports` | listar, assumir, ler totais, devolver resultado |
-| `WorkdayClient`: payroll inputs | `POST` e `DELETE` de lançamentos; busca de pay component pelo código |
-| Tabela **`payroll_input_sent`** (migration) | registro de envio: solicitação, ciclo, escopo, CNPJ, `employee_id` e `external_id`, código da verba, segundos, id do lançamento no Workday, run. **É o que permite apagar o envio anterior (P5)**: no Workday, lançar de novo soma |
-| Consulta periódica das solicitações | intervalo configurável (`PAYROLL_EXPORT_POLL_SECONDS`), ligada por variável de ambiente |
+| Interface de destino + `PayrollInputWriter` e `TimeTrackingWriter` | gravar e apagar lançamentos; achar a verba pelo código |
+| Tabela **`payroll_input_sent`** (migration) | registro de envio: solicitação, ciclo, escopo, CNPJ, `employee_id` e `external_id`, código da verba, data (no `time_tracking`), segundos, id do lançamento no Workday, run. **É o que permite corrigir um envio anterior** nos dois modos: no Workday, lançar de novo soma |
+| Consulta periódica das solicitações | `PAYROLL_EXPORT_POLL_SECONDS`, ligada por `PAYROLL_EXPORT_ENABLED` |
 | Parâmetro de execução no orquestrador | hoje o job não recebe parâmetros; aqui ele recebe a solicitação |
 
 **Reaproveitado da Fase 1:** orquestrador (lote, falha por item, lock por job,
 recuperação de run presa), `BaseRestClient`, `sync_run`/`sync_item`.
 
-**Ponto a descobrir no Workday (E1):** como achar o pay component pelo código. A
-REST de Payroll Input referencia o pay component pelo id interno; o código do
-Pmovel precisa ser convertido nesse id (busca por *reference ID* ou lista de pay
-components).
+**A descobrir no Workday (E1):**
+- como achar o pay component pelo código (a REST de Payroll Input referencia o
+  pay component pelo id interno);
+- se o Payroll Input aceita **valor negativo** (modo `delta`);
+- se o usuário da integração consegue **apagar** o que lançou (modo `replace`);
+- a API de horas reportadas do **Time Tracking** e se ela aceita registro por dia
+  com código de horas.
 
 ## 6. Pré-requisitos
 
@@ -161,16 +196,20 @@ marcações e eventos em pelo menos uma das 4 empresas do integrador.
 
 | Etapa | Conteúdo | Quem | Depende de |
 |---|---|---|---|
-| E0 | Confirmar P1; responder A1 a A5 ([fase-2-api-pmovel.md](fase-2-api-pmovel.md#5-perguntas-para-o-time-do-pmovel)) | cliente / time Pmovel | |
-| E1 | Liberar permissões no tenant de dev; descobrir a busca de pay component por código e o formato exato do `POST payrollInputs` | admin Workday + integrador | |
-| E2 | Rotas `payroll_exports` e tabela no Pmovel; dados de teste em dev | time Pmovel | A1 a A5 |
+| E1 | Liberar permissões no tenant de dev; descobrir os pontos de "A descobrir no Workday" (seção 5) e o formato exato dos lançamentos nos dois destinos | admin Workday + integrador | |
+| E2 | Rotas `payroll_exports` e tabela no Pmovel; dados de teste em dev | time Pmovel | |
 | E3 | Integrador: clientes, migration `payroll_input_sent`, job, consulta periódica, parâmetro no orquestrador, testes. Pode começar com o contrato da API Pmovel simulado nos testes | integrador | E1 |
-| E4 | Validar em dev: envio global, reenvio (apaga e grava), individual, individual recusado, verba inexistente, colaborador inexistente no Workday | todos | E2, E3 |
+| E4 | Validar em dev, nos dois destinos e nos dois modos: envio global, reenvio, individual com ciclo aberto, individual recusado, verba inexistente, colaborador inexistente no Workday | todos | E2, E3 |
 | E5 | Documentação | integrador | E4 |
 
 ## 8. Riscos
 
-- **Folha fora do Workday (P1):** muda o destino da fase inteira.
+- **Destino `time_tracking` (W1):** o Time Tracking registra horas por dia e pode
+  recalcular horas extras pelas regras do próprio Workday, divergindo do que o
+  Pmovel apurou. Confirmar em E1 se dá para lançar horas já classificadas (código
+  da verba) sem recálculo.
+- **Modo `delta` sem valor negativo (W3):** se o Workday não aceitar, toda redução
+  depois do envio vira ajuste manual.
 - **Lançamento em dobro:** Payroll Input soma. O registro de envio é a única
   fonte para apagar o envio anterior; se ele se perder, o reenvio duplica.
 - **Reenvio interrompido no meio:** parte apagada, parte gravada. O registro de

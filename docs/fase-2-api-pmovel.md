@@ -56,6 +56,8 @@ Uma linha por solicitação de envio.
 | `summary` | json, null | contadores devolvidos pelo integrador |
 | `errors` | json, null | lista de erros por colaborador/verba (formato na rota `finish`) |
 | `error_message` | text, null | erro geral, quando o envio inteiro falha |
+| `outdated` | bool, padrão `false` | o envio ficou desatualizado (ver 3.7) |
+| `outdated_at` | timestamp, null | quando ficou desatualizado |
 
 ## 3. Rotas
 
@@ -71,8 +73,9 @@ Validações (400 com mensagem clara):
   (`week IS NULL`);
 - `global`: o ciclo está **fechado** (`closed_cycle = 1`);
 - `individual`: o colaborador existe no cliente do ciclo e tem `dt_demissao`
-  **dentro do ciclo** (entre `start_date` e `end_date`). Ver a pergunta A1 sobre
-  exigir o ciclo fechado;
+  **dentro do ciclo** (entre `start_date` e `end_date`). O ciclo pode estar
+  **aberto ou fechado** (a rescisão costuma ser paga antes do fechamento). Pode
+  ser reenviado: cada envio substitui o anterior daquele colaborador;
 - não há outra solicitação `pending` ou `processing` para o mesmo ciclo (409).
   Para o `individual`, a regra vale para o mesmo ciclo + colaborador.
 
@@ -96,7 +99,8 @@ usa `?status=pending&target=workday`. A ordem é por `requested_at` crescente.
   "requested_by": "nome do usuário",
   "requested_at": "2026-06-20T13:00:00Z",
   "started_at": null, "finished_at": null,
-  "summary": null, "errors": null, "error_message": null
+  "summary": null, "errors": null, "error_message": null,
+  "outdated": false, "outdated_at": null
 }
 ```
 
@@ -113,6 +117,16 @@ Só para solicitações `processing` (senão 409). Devolve os totais de
 (`se_date BETWEEN start_date AND end_date`), com `se_id_event > 0`, **somados por
 colaborador e por código de verba** (`ehevents.e_code`).
 
+- **Todos os eventos entram**, inclusive os que foram desativados ou removidos
+  depois da apuração (sem filtro por `ev.e_active` / `ev.e_removed`). O filtro do
+  evento é só o cliente (`ev.e_client_id`).
+- O total é a soma de `se_time`, **sem aplicar** `se_factor` / `se_factor_time`.
+
+Parâmetros: `page`, `limit` (padrão 100, por colaborador) e `detail`:
+- `detail=total` (padrão): um total por colaborador e verba no ciclo;
+- `detail=daily`: o total por colaborador, verba **e dia** (`se_date`). Usado
+  quando o destino no Workday é o Time Tracking, que registra horas por data.
+
 Quem entra:
 - `global`: colaboradores do cliente **sem demissão dentro do ciclo**, ativos ou
   não. Quem tem `dt_demissao` entre `start_date` e `end_date` fica de fora: vai no
@@ -127,6 +141,8 @@ Diferenças em relação ao `event_totals` atual, que é a base:
 | só `u.e_active = true` | inclui inativos, com a regra acima | horas de demitidos e de quem saiu depois do ciclo não podem sumir |
 | agrupa por `ev.id` | agrupa por `ev.e_code` | a verba é o código; dois eventos com o mesmo código somam |
 | procura o ciclo por `year`/`month` | usa o ciclo da solicitação | o ciclo é escolhido pelo RH |
+| só eventos ativos (`ev.e_active`, `ev.e_removed`) | todos os eventos do cliente | todos os eventos que existirem devem ir |
+| só o total do ciclo | total do ciclo ou por dia (`detail`) | destino Time Tracking |
 | sem paginação | paginado por colaborador (`page`, `limit`, padrão 100) | clientes grandes |
 
 Resposta 200:
@@ -156,6 +172,17 @@ Resposta 200:
     }
   ]
 }
+```
+
+Com `detail=daily`, cada evento traz a lista por dia:
+
+```json
+{ "code": "0020", "name": "Horas Extras 50%", "type": "P",
+  "total_seconds": 12600, "hours_decimal": 3.5, "hours": "03:30",
+  "days": [
+    { "date": "2026-05-18", "total_seconds": 5400, "hours_decimal": 1.5, "hours": "01:30" },
+    { "date": "2026-05-20", "total_seconds": 7200, "hours_decimal": 2.0, "hours": "02:00" }
+  ] }
 ```
 
 Observações:
@@ -192,18 +219,31 @@ ou `failed` (nada foi enviado; `error_message` diz por quê).
 
 `pending` → `canceled`, para o RH desistir antes de o integrador assumir.
 
+### 3.7 Envio desatualizado (regra interna do Pmovel, sem rota nova)
+
+Quando um ciclo é **reaberto** (`closed_cycle` 1 → 0) depois de um envio, o Pmovel
+marca `outdated = true` e grava `outdated_at` nas solicitações `completed` e
+`completed_with_errors` daquele ciclo. A tela do RH mostra o aviso, e o RH dispara
+um novo envio quando o ciclo for fechado de novo. Um novo envio do mesmo ciclo e
+escopo não precisa desmarcar o antigo: o envio vigente é sempre o mais recente.
+
+Envios **individuais** podem ter sido feitos com o ciclo aberto, então as horas
+do colaborador podem mudar depois. Sugestão: marcar `outdated` também quando o
+resumo (`summary_register_events`) daquele colaborador no ciclo for recalculado
+depois do envio individual.
+
 ## 4. Permissões
 
 - A credencial do integrador (`users_api_client`) precisa de acesso às rotas 3.2
   a 3.5.
 - A rota 3.1 é da tela do RH (usuário logado), não do integrador.
 
-## 5. Perguntas para o time do Pmovel
+## 5. Decisões já tomadas (referência)
 
-| # | Pergunta |
-|---|---|
-| A1 | O envio **individual** do demitido exige o ciclo fechado? Normalmente a rescisão é paga antes do fechamento do ciclo. Se não exigir, o total do demitido pode mudar depois do envio (o reenvio individual substitui o anterior, então isso tem correção) |
-| A2 | `se_factor` e `se_factor_time` (`Hora`/`Minuto`) precisam ser aplicados ao total? O `event_totals` atual soma só `se_time` |
-| A3 | Eventos desativados ou removidos (`e_active = 0`, `e_removed = 1`) depois da apuração: as horas deles vão ou não? O `event_totals` atual descarta |
-| A4 | O `severance_process_number` do ciclo tem relação com o envio de rescisão? |
-| A5 | Ciclo **reaberto** depois de um envio: o Pmovel deve marcar o envio como desatualizado na tela, para o RH reenviar? |
+| # | Pergunta | Decisão |
+|---|---|---|
+| A1 | O envio individual do demitido exige ciclo fechado? | **Não** |
+| A2 | Aplicar `se_factor` / `se_factor_time` ao total? | **Não** |
+| A3 | Eventos desativados ou removidos depois da apuração vão? | **Sim, todos os eventos que existirem** |
+| A4 | `severance_process_number` tem relação com o envio? | **Não se aplica**: campo ignorado na Fase 2 |
+| A5 | Ciclo reaberto depois do envio: marcar como desatualizado? | **Sim** (ver 3.7) |

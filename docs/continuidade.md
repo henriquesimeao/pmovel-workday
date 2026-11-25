@@ -276,8 +276,8 @@ diferentes.
    do cliente, definir o de/para de CNPJ real e os valores de grupo/sindicato/jornada
    (pendências 7 e 9), e proteger os endpoints (pendência 11).
 4. **Fase 2** (Pmovel → Workday: horas extras e verbas): planejamento em
-   `docs/fase-2-planejamento.md` (decisões P2 a P8 tomadas; P1 em aberto: a folha
-   roda no Workday Payroll?). Rotas novas da API Pmovel especificadas em
+   `docs/fase-2-planejamento.md` (todas as decisões tomadas; falta a descoberta no
+   tenant de dev, etapa E1). Rotas novas da API Pmovel especificadas em
    `docs/fase-2-api-pmovel.md`. A fundação
    (`PhaseSyncJob`, `JobRegistry`, clientes, persistência) já suporta uma nova fase.
 
